@@ -1,4 +1,3 @@
-
 // Audio context singleton to ensure we use the same audio context throughout the app
 let audioContext: AudioContext | null = null;
 
@@ -121,11 +120,20 @@ export const blobToAudioBuffer = async (blob: Blob): Promise<AudioBuffer> => {
 export const playAudioBuffer = (
   buffer: AudioBuffer, 
   onEnded?: () => void
-): { start: () => void; stop: () => void } => {
+): { 
+  start: () => void; 
+  stop: () => void;
+  setPlaybackRate: (rate: number) => void;
+  seek: (time: number) => void;
+} => {
   const context = getAudioContext();
   const source = context.createBufferSource();
   source.buffer = buffer;
   source.connect(context.destination);
+  
+  let startedAt = 0;
+  let pausedAt = 0;
+  let isPlaying = false;
   
   if (onEnded) {
     source.onended = onEnded;
@@ -134,7 +142,14 @@ export const playAudioBuffer = (
   return {
     start: () => {
       try {
-        source.start(0);
+        if (pausedAt) {
+          startedAt = context.currentTime - pausedAt;
+          source.start(0, pausedAt);
+        } else {
+          startedAt = context.currentTime;
+          source.start(0);
+        }
+        isPlaying = true;
       } catch (error) {
         console.error("Error starting audio playback:", error);
       }
@@ -142,8 +157,26 @@ export const playAudioBuffer = (
     stop: () => {
       try {
         source.stop();
+        if (isPlaying) {
+          pausedAt = context.currentTime - startedAt;
+          isPlaying = false;
+        }
       } catch (error) {
         console.error("Error stopping audio playback:", error);
+      }
+    },
+    setPlaybackRate: (rate: number) => {
+      try {
+        source.playbackRate.value = rate;
+      } catch (error) {
+        console.error("Error setting playback rate:", error);
+      }
+    },
+    seek: (time: number) => {
+      try {
+        pausedAt = time;
+      } catch (error) {
+        console.error("Error seeking:", error);
       }
     }
   };
