@@ -1,8 +1,12 @@
 
 import { useState, useRef, useEffect } from "react";
-import { Mic, MicOff, Square, Loader, Upload } from "lucide-react";
+import { Mic, MicOff, Square, Loader, Upload, Play, Pause } from "lucide-react";
+import { toast } from "sonner";
 import Button from "./Button";
 import AudioVisualizer from "./AudioVisualizer";
+import { useAudio } from "../contexts/AudioContext";
+import { useAudioPlayer } from "../hooks/useAudioPlayer";
+import { blobToAudioBuffer } from "../services/audioService";
 
 interface VocalRecorderProps {
   onRecordingComplete?: (audioBlob: Blob) => void;
@@ -15,12 +19,15 @@ const VocalRecorder = ({
   onFileUpload,
   className = "" 
 }: VocalRecorderProps) => {
+  const { setVocalAudioBlob, vocalAudioBlob } = useAudio();
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
+  
+  const { isPlaying, togglePlayback } = useAudioPlayer(audioBuffer);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -33,6 +40,24 @@ const VocalRecorder = ({
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
+  
+  // Load audio buffer when blob changes
+  useEffect(() => {
+    const loadAudio = async () => {
+      if (vocalAudioBlob && audioUrl) {
+        try {
+          const buffer = await blobToAudioBuffer(vocalAudioBlob);
+          setAudioBuffer(buffer);
+        } catch (error) {
+          console.error("Error converting blob to audio buffer:", error);
+        }
+      } else {
+        setAudioBuffer(null);
+      }
+    };
+    
+    loadAudio();
+  }, [vocalAudioBlob, audioUrl]);
 
   const startRecording = async () => {
     try {
@@ -57,12 +82,15 @@ const VocalRecorder = ({
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
         const url = URL.createObjectURL(audioBlob);
         setAudioUrl(url);
+        setVocalAudioBlob(audioBlob);
         onRecordingComplete?.(audioBlob);
         
         // Clear recording data
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
         }
+        
+        toast.success("Recording completed successfully!");
       };
       
       // Start recording
@@ -80,6 +108,7 @@ const VocalRecorder = ({
     } catch (err) {
       console.error("Error starting recording:", err);
       setError("Could not access microphone. Please ensure microphone permissions are granted.");
+      toast.error("Microphone access denied. Please check permissions.");
     }
   };
 
@@ -97,7 +126,7 @@ const VocalRecorder = ({
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
@@ -107,16 +136,31 @@ const VocalRecorder = ({
     if (!file.type.startsWith('audio/')) {
       setError("Please upload an audio file.");
       setIsUploading(false);
+      toast.error("Invalid file type. Please upload an audio file.");
       return;
     }
     
-    // Create URL for the uploaded file
-    const url = URL.createObjectURL(file);
-    setAudioUrl(url);
-    
-    // Pass the file to parent component
-    onFileUpload?.(file);
-    setIsUploading(false);
+    try {
+      // Create URL for the uploaded file
+      const url = URL.createObjectURL(file);
+      setAudioUrl(url);
+      
+      // Convert to blob
+      const buffer = await file.arrayBuffer();
+      const blob = new Blob([buffer], { type: file.type });
+      
+      // Set the vocal audio blob
+      setVocalAudioBlob(blob);
+      
+      // Pass the file to parent component
+      onFileUpload?.(file);
+      toast.success("Audio file uploaded successfully!");
+    } catch (error) {
+      console.error("Error processing uploaded file:", error);
+      toast.error("Error processing the audio file");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const triggerFileUpload = () => {
@@ -215,11 +259,12 @@ const VocalRecorder = ({
       {audioUrl && !isRecording && (
         <div className="mt-4 flex justify-center">
           <Button 
-            onClick={() => setIsPlaying(!isPlaying)}
+            onClick={togglePlayback}
             variant="ghost"
             size="sm"
-            className="text-light-100/70 hover:text-light-100"
+            className="text-light-100/70 hover:text-light-100 flex items-center gap-2"
           >
+            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             {isPlaying ? "Pause" : "Play Recording"}
           </Button>
         </div>

@@ -1,8 +1,12 @@
 
-import { useState } from "react";
-import { Music, Search, ArrowUp, ArrowDown } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Music, Search, ArrowUp, ArrowDown, Play, Pause } from "lucide-react";
+import { toast } from "sonner";
 import Button from "./Button";
 import AudioVisualizer from "./AudioVisualizer";
+import { useAudio } from "../contexts/AudioContext";
+import { useAudioPlayer } from "../hooks/useAudioPlayer";
+import { blobToAudioBuffer } from "../services/audioService";
 
 interface Instrumental {
   id: string;
@@ -23,7 +27,7 @@ const dummyInstrumentals: Instrumental[] = [
     bpm: 85,
     key: "C Minor",
     duration: "3:24",
-    audioUrl: ""
+    audioUrl: "https://storage.googleapis.com/aivalab-samples/lofi-beat.mp3"
   },
   {
     id: "2",
@@ -32,7 +36,7 @@ const dummyInstrumentals: Instrumental[] = [
     bpm: 110,
     key: "E Minor",
     duration: "4:12",
-    audioUrl: ""
+    audioUrl: "https://storage.googleapis.com/aivalab-samples/orchestral.mp3"
   },
   {
     id: "3",
@@ -41,7 +45,7 @@ const dummyInstrumentals: Instrumental[] = [
     bpm: 95,
     key: "G Major",
     duration: "2:58",
-    audioUrl: ""
+    audioUrl: "https://storage.googleapis.com/aivalab-samples/hiphop.mp3"
   },
   {
     id: "4",
@@ -50,7 +54,7 @@ const dummyInstrumentals: Instrumental[] = [
     bpm: 120,
     key: "D Minor",
     duration: "3:45",
-    audioUrl: ""
+    audioUrl: "https://storage.googleapis.com/aivalab-samples/jazz.mp3"
   },
   {
     id: "5",
@@ -59,9 +63,36 @@ const dummyInstrumentals: Instrumental[] = [
     bpm: 128,
     key: "A Minor",
     duration: "4:30",
-    audioUrl: ""
+    audioUrl: "https://storage.googleapis.com/aivalab-samples/edm.mp3"
   }
 ];
+
+// Simulate loading audio from URL
+const loadAudioFromUrl = async (url: string): Promise<Blob> => {
+  // In a real app, this would fetch from a real URL
+  // For demo purposes, we'll create a synthetic audio blob
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const sampleRate = 44100;
+      const lengthInSamples = sampleRate * 3; // 3 seconds
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const buffer = audioContext.createBuffer(2, lengthInSamples, sampleRate);
+      
+      // Create some basic waveform data
+      for (let channel = 0; channel < 2; channel++) {
+        const data = buffer.getChannelData(channel);
+        for (let i = 0; i < lengthInSamples; i++) {
+          // Create a simple sine wave
+          data[i] = Math.sin(i * 0.01) * 0.5;
+        }
+      }
+      
+      // Convert to WAV blob
+      const wavBlob = new Blob([buffer], { type: 'audio/wav' });
+      resolve(wavBlob);
+    }, 500);
+  });
+};
 
 interface InstrumentalBrowserProps {
   onSelect?: (instrumental: Instrumental) => void;
@@ -69,17 +100,46 @@ interface InstrumentalBrowserProps {
 }
 
 const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserProps) => {
+  const { setInstrumentalAudioBlob } = useAudio();
   const [instrumentals] = useState<Instrumental[]>(dummyInstrumentals);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedInstrumental, setSelectedInstrumental] = useState<Instrumental | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [sortBy, setSortBy] = useState<"title" | "bpm" | "genre">("title");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [isLoading, setIsLoading] = useState(false);
+  const [instrumentalBlob, setInstrumentalBlob] = useState<Blob | null>(null);
+  const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
+  
+  const { isPlaying, togglePlayback } = useAudioPlayer(audioBuffer);
 
-  const handleInstrumentalSelect = (instrumental: Instrumental) => {
+  const handleInstrumentalSelect = async (instrumental: Instrumental) => {
+    if (selectedInstrumental?.id === instrumental.id) {
+      // If already selected, just toggle playback
+      togglePlayback();
+      return;
+    }
+    
     setSelectedInstrumental(instrumental);
-    setIsPlaying(true);
-    onSelect?.(instrumental);
+    setIsLoading(true);
+    
+    try {
+      // In a real app, we would load the actual audio from the URL
+      const audioBlob = await loadAudioFromUrl(instrumental.audioUrl);
+      setInstrumentalBlob(audioBlob);
+      setInstrumentalAudioBlob(audioBlob);
+      
+      // Convert to audio buffer for playback
+      const buffer = await blobToAudioBuffer(audioBlob);
+      setAudioBuffer(buffer);
+      
+      onSelect?.(instrumental);
+      toast.success(`Selected "${instrumental.title}"`);
+    } catch (error) {
+      console.error("Error loading instrumental:", error);
+      toast.error("Failed to load instrumental");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const toggleSort = (field: "title" | "bpm" | "genre") => {
@@ -204,7 +264,15 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
           </div>
           
           <div className="h-20 bg-dark-300 rounded-lg overflow-hidden mb-3">
-            <AudioVisualizer isPlaying={isPlaying} />
+            <AudioVisualizer 
+              isPlaying={isPlaying && !isLoading} 
+              audioUrl={selectedInstrumental.audioUrl}
+            />
+            {isLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-dark-200/60 backdrop-blur-sm">
+                <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full"></div>
+              </div>
+            )}
           </div>
           
           <div className="flex justify-between">
@@ -215,8 +283,11 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setIsPlaying(!isPlaying)}
+              onClick={togglePlayback}
+              disabled={isLoading}
+              className="flex items-center gap-2"
             >
+              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
               {isPlaying ? "Pause" : "Play"}
             </Button>
           </div>

@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Save, Download, Volume, VolumeX, ArrowLeft, Loader, Share2 } from "lucide-react";
+import { Save, Download, Volume, VolumeX, ArrowLeft, Loader, Share2, Play, Pause } from "lucide-react";
 import { toast } from "sonner";
 import Layout from "../components/Layout";
 import Button from "../components/Button";
@@ -9,7 +9,10 @@ import AudioVisualizer from "../components/AudioVisualizer";
 import VocalRecorder from "../components/VocalRecorder";
 import InstrumentalBrowser from "../components/InstrumentalBrowser";
 import MixingConsole from "../components/MixingConsole";
-import GroovePad from "../components/GroovePad";
+import GroovePadConnector from "../components/GroovePadConnector";
+import { useAudio } from "../contexts/AudioContext";
+import { useAudioPlayer } from "../hooks/useAudioPlayer";
+import { audioBufferToWav } from "../services/audioService";
 
 interface ProjectData {
   id: string;
@@ -31,16 +34,27 @@ const Studio = () => {
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get('project');
   
+  const { 
+    vocalAudioBlob, 
+    instrumentalAudioBlob, 
+    processedAudioBuffer,
+    isProcessing, 
+    processAudioFiles,
+    mood,
+    energy 
+  } = useAudio();
+  
+  const { isPlaying, togglePlayback } = useAudioPlayer(processedAudioBuffer);
+  
   const [project, setProject] = useState<ProjectData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [processing, setProcessing] = useState(false);
   const [projectTitle, setProjectTitle] = useState("Untitled Project");
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   
-  const [vocalRecorded, setVocalRecorded] = useState(false);
-  const [instrumentalSelected, setInstrumentalSelected] = useState(false);
-  const [processed, setProcessed] = useState(false);
+  const handleMixSettingsChange = (settings: any) => {
+    // In a real app, this would apply mix settings
+    toast.success("Mix settings applied");
+  };
   
   useEffect(() => {
     if (projectId) {
@@ -49,10 +63,6 @@ const Studio = () => {
         .then(data => {
           setProject(data);
           setProjectTitle(data.title);
-          // Simulate having data in this project
-          setVocalRecorded(true);
-          setInstrumentalSelected(true);
-          setProcessed(true);
         })
         .catch(error => {
           console.error("Error loading project:", error);
@@ -64,48 +74,46 @@ const Studio = () => {
     }
   }, [projectId]);
 
-  const handleVocalRecorded = () => {
-    setVocalRecorded(true);
-    toast.success("Vocal recorded successfully");
-  };
-
-  const handleInstrumentalSelected = () => {
-    setInstrumentalSelected(true);
-    toast.success("Instrumental selected");
-  };
-
-  const handleGroovePadChange = (energy: number, mood: number) => {
-    console.log("Energy:", energy, "Mood:", mood);
-    // In a real app, this would update the audio processing parameters
-  };
-
-  const handleProcessAudio = () => {
-    if (!vocalRecorded || !instrumentalSelected) {
-      toast.error("Please record vocals and select an instrumental first");
+  const handleExportAudio = () => {
+    if (!processedAudioBuffer) {
+      toast.error("No processed audio to export");
       return;
     }
     
-    setProcessing(true);
-    
-    // Simulate AI processing
-    setTimeout(() => {
-      setProcessed(true);
-      setProcessing(false);
-      setIsPlaying(true);
-      toast.success("Audio processing complete");
-    }, 3000);
+    try {
+      // Convert audio buffer to WAV blob
+      const wavBlob = audioBufferToWav(processedAudioBuffer);
+      
+      // Create download link
+      const url = URL.createObjectURL(wavBlob);
+      const a = document.createElement("a");
+      a.style.display = "none";
+      a.href = url;
+      a.download = `${projectTitle.replace(/\s+/g, '-').toLowerCase()}.wav`;
+      
+      // Add to document, click and cleanup
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast.success("Audio exported successfully");
+    } catch (error) {
+      console.error("Error exporting audio:", error);
+      toast.error("Failed to export audio");
+    }
   };
 
   const handleSaveProject = () => {
+    // In a real app, this would save to a database
     toast.success("Project saved successfully");
   };
 
-  const handleExportAudio = () => {
-    toast.success("Audio exported successfully");
-  };
-
   const handleShare = () => {
-    toast.success("Share link copied to clipboard");
+    // In a real app, this would generate a share link
+    navigator.clipboard.writeText(window.location.href)
+      .then(() => toast.success("Share link copied to clipboard"))
+      .catch(() => toast.error("Failed to copy link"));
   };
 
   return (
@@ -164,6 +172,7 @@ const Studio = () => {
                   size="sm"
                   className="flex items-center gap-1"
                   onClick={handleExportAudio}
+                  disabled={!processedAudioBuffer}
                 >
                   <Download className="h-4 w-4" />
                   <span className="hidden sm:inline">Export</span>
@@ -190,9 +199,9 @@ const Studio = () => {
                   <h2 className="text-xl font-semibold mb-4">Audio Preview</h2>
                   
                   <div className="h-40 bg-dark-300 rounded-lg overflow-hidden relative">
-                    <AudioVisualizer isPlaying={isPlaying && !processing} />
+                    <AudioVisualizer isPlaying={isPlaying && !isProcessing} />
                     
-                    {processing && (
+                    {isProcessing && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center bg-dark-200/60 backdrop-blur-sm">
                         <Loader className="h-8 w-8 animate-spin text-primary mb-2" />
                         <span className="text-sm text-light-100/80">Processing audio...</span>
@@ -202,44 +211,63 @@ const Studio = () => {
                   
                   <div className="flex justify-between items-center mt-4">
                     <div className="text-sm text-light-100/60">
-                      {processed ? "Ready to play" : "Waiting for processing..."}
+                      {processedAudioBuffer ? "Ready to play" : "Waiting for processing..."}
                     </div>
                     
                     <div className="flex gap-2">
                       <Button
-                        variant={processed ? "gradient" : "outline"}
+                        variant={processedAudioBuffer ? "gradient" : "outline"}
                         size="sm"
                         className="flex items-center gap-1"
-                        disabled={processing || !vocalRecorded || !instrumentalSelected}
-                        onClick={processed ? () => setIsPlaying(!isPlaying) : handleProcessAudio}
-                        isLoading={processing}
+                        disabled={isProcessing || !vocalAudioBlob || !instrumentalAudioBlob}
+                        onClick={processedAudioBuffer ? togglePlayback : processAudioFiles}
+                        isLoading={isProcessing}
                       >
-                        {processed ? (isPlaying ? "Pause" : "Play") : "Process Audio"}
+                        {processedAudioBuffer ? (
+                          <>
+                            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                            {isPlaying ? "Pause" : "Play"}
+                          </>
+                        ) : (
+                          "Process Audio"
+                        )}
                       </Button>
                     </div>
                   </div>
                 </div>
                 
                 {/* Mixing console */}
-                <MixingConsole />
+                <MixingConsole onSaveMix={handleMixSettingsChange} />
               </div>
               
               {/* Right column */}
               <div className="space-y-6">
                 {/* Vocal recorder */}
-                <VocalRecorder onRecordingComplete={handleVocalRecorded} />
+                <VocalRecorder />
                 
                 {/* Instrumental browser */}
-                <InstrumentalBrowser onSelect={handleInstrumentalSelected} />
+                <InstrumentalBrowser />
                 
                 {/* Groove pad */}
                 <div className="glass-card p-6">
                   <h3 className="text-xl font-semibold mb-4">Mood & Energy</h3>
                   <div className="flex justify-center">
-                    <GroovePad 
-                      label="Adjust Mood & Energy" 
-                      onChange={handleGroovePadChange} 
-                    />
+                    <GroovePadConnector />
+                  </div>
+                  
+                  <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-light-100/70">
+                    <div className="text-center">
+                      <div className="mb-1">Mood</div>
+                      <div className="font-semibold">
+                        {mood < -0.33 ? "Melancholic" : mood > 0.33 ? "Uplifting" : "Neutral"}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="mb-1">Energy</div>
+                      <div className="font-semibold">
+                        {energy < -0.33 ? "Chill" : energy > 0.33 ? "Energetic" : "Balanced"}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
