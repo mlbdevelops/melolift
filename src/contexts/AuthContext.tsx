@@ -1,14 +1,18 @@
+
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useUser, useSupabaseClient } from '@supabase/auth-helpers-react';
+import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 
 interface AuthContextType {
   user: any | null;
   session: any | null;
+  profile: any | null;
   subscription: Tables<'user_subscriptions'> | null;
   loading: boolean;
   isPremiumFeature: (feature: string) => boolean;
   refreshSubscription: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -18,33 +22,77 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const user = useUser();
-  const supabaseClient = useSupabaseClient();
-  const [session, setSession] = useState(null);
+  const [user, setUser] = useState<any | null>(null);
+  const [session, setSession] = useState<any | null>(null);
+  const [profile, setProfile] = useState<any | null>(null);
   const [subscription, setSubscription] = useState<Tables<'user_subscriptions'> | null>(null);
   const [loading, setLoading] = useState(true);
   
   useEffect(() => {
-    const getSession = async () => {
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      setSession(session);
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, currentSession) => {
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+
+        if (currentSession?.user) {
+          // Fetch profile in a separate non-blocking call
+          setTimeout(() => {
+            fetchProfile(currentSession.user.id);
+          }, 0);
+        } else {
+          setProfile(null);
+        }
+      }
+    );
+
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+      
+      if (currentSession?.user) {
+        fetchProfile(currentSession.user.id);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
     };
-    
-    getSession();
-  }, [supabaseClient]);
+  }, []);
+  
+  const fetchProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+        
+      if (error) {
+        console.error("Error fetching profile:", error);
+        setProfile(null);
+      } else {
+        setProfile(data);
+      }
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+      setProfile(null);
+    }
+  };
   
   useEffect(() => {
     const fetchSubscription = async () => {
       if (user?.id) {
         try {
-          const { data, error } = await supabaseClient
+          const { data, error } = await supabase
             .from('user_subscriptions')
             .select('*')
             .eq('user_id', user.id)
-            .single();
+            .maybeSingle();
             
           if (error) {
-            // No subscription found, which is fine
+            console.error("Error fetching subscription:", error);
             setSubscription(null);
           } else {
             setSubscription(data);
@@ -61,30 +109,47 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     };
     
-    fetchSubscription();
-  }, [user, supabaseClient]);
+    if (user) {
+      fetchSubscription();
+    }
+  }, [user]);
   
   const refreshSubscription = async () => {
     if (user?.id) {
       try {
-        const { data, error } = await supabaseClient
+        const { data, error } = await supabase
           .from('user_subscriptions')
           .select('*')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
           
         if (error) {
-          // No subscription found, which is fine
+          console.error("Error refreshing subscription:", error);
           setSubscription(null);
         } else {
           setSubscription(data);
         }
       } catch (error) {
-        console.error("Error fetching subscription:", error);
+        console.error("Error refreshing subscription:", error);
         setSubscription(null);
       }
     } else {
       setSubscription(null);
+    }
+  };
+
+  const refreshProfile = async () => {
+    if (user?.id) {
+      await fetchProfile(user.id);
+    }
+  };
+  
+  const signOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      // Auth state listener will handle updating the state
+    } catch (error) {
+      console.error("Error signing out:", error);
     }
   };
   
@@ -111,10 +176,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const value: AuthContextType = {
     user,
     session,
+    profile,
     subscription,
     loading,
     isPremiumFeature,
-    refreshSubscription
+    refreshSubscription,
+    refreshProfile,
+    signOut
   };
   
   return (

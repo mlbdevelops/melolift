@@ -1,9 +1,9 @@
 
-import { useEffect, useState } from 'react';
-import { Check } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import Button from './Button';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from "react";
+import { Check } from "lucide-react";
+import Button from "./Button";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 
 interface Plan {
   id: number;
@@ -29,20 +29,27 @@ const SubscriptionPlansSection = () => {
         if (error) throw error;
         
         const formattedPlans = data.map(plan => {
-          // Handle features safely as an array
+          // Safely parse features from JSON
           let featuresArray: string[] = [];
           
-          // Parse features from the JSON
           if (plan.features) {
-            if (typeof plan.features === 'string') {
-              try {
+            try {
+              // If features is a string, try to parse it
+              if (typeof plan.features === 'string') {
                 const parsed = JSON.parse(plan.features);
-                featuresArray = parsed.features || [];
-              } catch {
-                featuresArray = [];
+                featuresArray = Array.isArray(parsed) ? parsed : (parsed.features || []);
+              } 
+              // If features is already an object
+              else if (typeof plan.features === 'object') {
+                if (Array.isArray(plan.features)) {
+                  featuresArray = plan.features;
+                } else {
+                  featuresArray = plan.features.features || [];
+                }
               }
-            } else if (typeof plan.features === 'object') {
-              featuresArray = plan.features.features || [];
+            } catch (e) {
+              console.error("Error parsing features:", e);
+              featuresArray = [];
             }
           }
           
@@ -62,17 +69,25 @@ const SubscriptionPlansSection = () => {
     
     fetchPlans();
   }, []);
-  
-  const handleSubscribe = () => {
-    navigate('/subscription');
+
+  const handleGetStarted = () => {
+    navigate("/auth");
   };
   
   if (loading) {
-    return <div className="py-16 text-center">Loading plans...</div>;
+    return (
+      <section className="py-16 bg-dark-200">
+        <div className="container mx-auto">
+          <div className="flex justify-center">
+            <div className="animate-spin h-8 w-8 border-t-2 border-primary rounded-full"></div>
+          </div>
+        </div>
+      </section>
+    );
   }
   
   return (
-    <section className="py-16 bg-dark-100" id="pricing">
+    <section className="py-16 bg-dark-200">
       <div className="container mx-auto px-4">
         <div className="text-center max-w-3xl mx-auto mb-12">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Choose Your Plan</h2>
@@ -130,9 +145,9 @@ const SubscriptionPlansSection = () => {
                   <Button
                     variant={isPro || isPremium ? "gradient" : "default"}
                     className="w-full"
-                    onClick={handleSubscribe}
+                    onClick={handleGetStarted}
                   >
-                    {plan.price === 0 ? "Get Started" : "Subscribe"}
+                    Get Started
                   </Button>
                 </div>
               </div>

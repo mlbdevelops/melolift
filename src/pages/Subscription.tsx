@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Check, Shield, Cloud, Music, BarChart, Clock, Waves, Download } from "lucide-react";
 import { toast } from "sonner";
@@ -6,6 +5,7 @@ import Layout from "../components/Layout";
 import Button from "../components/Button";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { initiateStripeCheckout } from "@/services/paymentService";
 
 interface Plan {
   id: number;
@@ -32,22 +32,24 @@ const Subscription = () => {
         if (error) throw error;
         
         const formattedPlans = data.map(plan => {
-          // Handle features safely as an array
           let featuresArray: string[] = [];
           
-          // Parse features from the JSON
           if (plan.features) {
-            if (typeof plan.features === 'string') {
-              // If it's a string, try to parse it
-              try {
+            try {
+              if (typeof plan.features === 'string') {
                 const parsed = JSON.parse(plan.features);
-                featuresArray = parsed.features || [];
-              } catch {
-                featuresArray = [];
+                featuresArray = Array.isArray(parsed) ? parsed : (parsed.features || []);
+              } 
+              else if (typeof plan.features === 'object') {
+                if (Array.isArray(plan.features)) {
+                  featuresArray = plan.features;
+                } else {
+                  featuresArray = plan.features.features || [];
+                }
               }
-            } else if (typeof plan.features === 'object') {
-              // If it's already an object
-              featuresArray = plan.features.features || [];
+            } catch (e) {
+              console.error("Error parsing features:", e);
+              featuresArray = [];
             }
           }
           
@@ -78,38 +80,16 @@ const Subscription = () => {
     setSubscribing(true);
     
     try {
-      // In a real app, this would redirect to Stripe Checkout
-      // For demo purposes, we'll just update the subscription directly
+      const checkoutUrl = await initiateStripeCheckout(planId, user.id);
       
-      // First check if user already has a subscription
-      if (subscription) {
-        const { error } = await supabase
-          .from("user_subscriptions")
-          .update({
-            plan_id: planId,
-            updated_at: new Date().toISOString()
-          })
-          .eq("id", subscription.id);
-          
-        if (error) throw error;
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl;
       } else {
-        const { error } = await supabase
-          .from("user_subscriptions")
-          .insert({
-            user_id: user.id,
-            plan_id: planId,
-            status: "active"
-          });
-          
-        if (error) throw error;
+        throw new Error("Failed to create checkout session");
       }
-      
-      toast.success("Subscription updated successfully!");
-      refreshSubscription();
     } catch (error) {
       console.error("Error subscribing:", error);
-      toast.error("Failed to update subscription");
-    } finally {
+      toast.error("Failed to create checkout session");
       setSubscribing(false);
     }
   };

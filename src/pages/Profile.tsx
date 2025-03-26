@@ -45,7 +45,7 @@ const Profile = () => {
       fetchProjectStats();
       fetchRecentProjects();
     }
-  }, [user]);
+  }, [user, profile]);
 
   const fetchUserData = async () => {
     if (!user || !profile) return;
@@ -71,10 +71,11 @@ const Profile = () => {
         display_name: profile.display_name || 'User',
         bio: 'Music producer and vocalist with a passion for creating unique sounds.',
       });
+
+      setLoading(false);
     } catch (error) {
       console.error("Error fetching user data:", error);
       toast.error("Failed to load user profile");
-    } finally {
       setLoading(false);
     }
   };
