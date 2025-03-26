@@ -4,6 +4,7 @@ import { Check } from "lucide-react";
 import Button from "./Button";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { Json } from "@/integrations/supabase/types";
 
 interface Plan {
   id: number;
@@ -51,7 +52,7 @@ const SubscriptionPlansSection = () => {
                   const objFeatures = plan.features as any;
                   featuresArray = objFeatures.features 
                     ? objFeatures.features.map((f: any) => String(f)) 
-                    : Object.values(plan.features).map(f => String(f));
+                    : Object.values(plan.features as Record<string, unknown>).map(f => String(f));
                 }
               }
             } catch (e) {
