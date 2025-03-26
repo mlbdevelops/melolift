@@ -5,27 +5,12 @@ import { Activity, Play, Pause, Save, Download, Upload, Trash2, Settings as Sett
 import { toast } from "sonner";
 import Layout from "../components/Layout";
 import Button from "../components/Button";
-import MixingConsole from "../components/MixingConsole";
+import MixingConsole, { MixSettings } from "../components/MixingConsole";
 import { useAudio } from "../contexts/AudioContext";
 import VocalRecorder from "../components/VocalRecorder";
 import InstrumentalBrowser from "../components/InstrumentalBrowser";
 import { supabase } from "@/integrations/supabase/client";
 import { Json } from "@/integrations/supabase/types";
-
-// Define MixSettings interface
-interface MixSettings {
-  reverb: number;
-  delay: number;
-  eq: {
-    low: number;
-    mid: number;
-    high: number;
-  };
-  compression: number;
-  vocalVolume: number;
-  instrumentalVolume: number;
-  // Add any other settings as needed
-}
 
 const defaultSettings: MixSettings = {
   reverb: 0.3,
@@ -40,6 +25,14 @@ const defaultSettings: MixSettings = {
   instrumentalVolume: 0.6
 };
 
+interface Project {
+  id: string;
+  title: string;
+  description?: string;
+  settings?: Json;
+  [key: string]: any;
+}
+
 const Mixing = () => {
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get("id");
@@ -49,7 +42,7 @@ const Mixing = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [settings, setSettings] = useState<MixSettings>(defaultSettings);
   const [showSettings, setShowSettings] = useState(false);
-  const [project, setProject] = useState(null);
+  const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingProject, setSavingProject] = useState(false);
   
@@ -132,7 +125,7 @@ const Mixing = () => {
   };
   
   const handleSaveProject = async () => {
-    if (!projectId) {
+    if (!projectId || !project) {
       // Create new project
       navigate("/studio"); // Redirect to studio to create a new project
       return;
@@ -208,7 +201,7 @@ const Mixing = () => {
                 <h2 className="text-xl font-semibold">Mixing Console</h2>
                 <div className="flex space-x-2">
                   <Button 
-                    variant={isPlaying ? "destructive" : "gradient"}
+                    variant={isPlaying ? "gradient" : "gradient"}
                     size="sm"
                     onClick={togglePlayback}
                   >
@@ -248,6 +241,7 @@ const Mixing = () => {
                 settings={settings} 
                 onSettingsChange={handleSettingsChange}
                 isPlaying={isPlaying}
+                onSaveMix={handleSaveProject}
               />
             </div>
           </div>

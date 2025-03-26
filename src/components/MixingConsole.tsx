@@ -3,60 +3,53 @@ import { useState } from "react";
 import { Sliders, BarChart, Save, RefreshCw } from "lucide-react";
 import Button from "./Button";
 
-interface MixingConsoleProps {
-  className?: string;
-  onSaveMix?: (settings: MixSettings) => void;
-}
-
-interface MixSettings {
-  vocalVolume: number;
-  instrumentalVolume: number;
-  vocalReverb: number;
-  vocalDelay: number;
-  vocalCompression: number;
-  vocalEQ: {
+// Define MixSettings interface to be used across components
+export interface MixSettings {
+  reverb: number;
+  delay: number;
+  eq: {
     low: number;
     mid: number;
     high: number;
   };
-  harmonies: number;
+  compression: number;
+  vocalVolume: number;
+  instrumentalVolume: number;
 }
 
-const MixingConsole = ({ className = "", onSaveMix }: MixingConsoleProps) => {
-  const [settings, setSettings] = useState<MixSettings>({
-    vocalVolume: 75,
-    instrumentalVolume: 65,
-    vocalReverb: 30,
-    vocalDelay: 15,
-    vocalCompression: 50,
-    vocalEQ: {
-      low: 0,
-      mid: 0,
-      high: 5,
-    },
-    harmonies: 40,
-  });
+interface MixingConsoleProps {
+  className?: string;
+  settings: MixSettings;
+  onSettingsChange: (settings: Partial<MixSettings>) => void;
+  isPlaying?: boolean;
+  onSaveMix?: () => void;
+}
 
+const MixingConsole = ({ 
+  className = "", 
+  settings, 
+  onSettingsChange,
+  isPlaying,
+  onSaveMix 
+}: MixingConsoleProps) => {
   const [isPending, setIsPending] = useState(false);
 
   const handleSettingChange = (
-    setting: string,
+    setting: keyof MixSettings,
     value: number,
     category?: string,
     subcategory?: string
   ) => {
-    if (category === "vocalEQ") {
-      setSettings({
-        ...settings,
-        vocalEQ: {
-          ...settings.vocalEQ,
-          [subcategory as string]: value,
-        },
+    if (category === "eq" && subcategory) {
+      onSettingsChange({
+        eq: {
+          ...settings.eq,
+          [subcategory]: value,
+        }
       });
     } else {
-      setSettings({
-        ...settings,
-        [setting]: value,
+      onSettingsChange({
+        [setting]: value
       });
     }
   };
@@ -66,7 +59,7 @@ const MixingConsole = ({ className = "", onSaveMix }: MixingConsoleProps) => {
     
     // Simulate processing delay
     setTimeout(() => {
-      onSaveMix?.(settings);
+      onSaveMix?.();
       setIsPending(false);
     }, 1500);
   };
@@ -76,18 +69,17 @@ const MixingConsole = ({ className = "", onSaveMix }: MixingConsoleProps) => {
     
     // Simulate AI optimization
     setTimeout(() => {
-      setSettings({
-        vocalVolume: 78,
-        instrumentalVolume: 62,
-        vocalReverb: 35,
-        vocalDelay: 18,
-        vocalCompression: 55,
-        vocalEQ: {
+      onSettingsChange({
+        reverb: 0.35,
+        delay: 0.18,
+        compression: 0.55,
+        vocalVolume: 0.78,
+        instrumentalVolume: 0.62,
+        eq: {
           low: 2,
           mid: -2,
           high: 3,
-        },
-        harmonies: 45,
+        }
       });
       setIsPending(false);
     }, 2000);
@@ -134,14 +126,15 @@ const MixingConsole = ({ className = "", onSaveMix }: MixingConsoleProps) => {
           <div className="space-y-1">
             <div className="flex justify-between text-sm">
               <label>Vocal Volume</label>
-              <span>{settings.vocalVolume}%</span>
+              <span>{Math.round(settings.vocalVolume * 100)}%</span>
             </div>
             <input
               type="range"
               min="0"
-              max="100"
+              max="1"
+              step="0.01"
               value={settings.vocalVolume}
-              onChange={(e) => handleSettingChange("vocalVolume", parseInt(e.target.value))}
+              onChange={(e) => handleSettingChange("vocalVolume", parseFloat(e.target.value))}
               className="w-full accent-primary"
             />
           </div>
@@ -149,29 +142,15 @@ const MixingConsole = ({ className = "", onSaveMix }: MixingConsoleProps) => {
           <div className="space-y-1">
             <div className="flex justify-between text-sm">
               <label>Instrumental Volume</label>
-              <span>{settings.instrumentalVolume}%</span>
+              <span>{Math.round(settings.instrumentalVolume * 100)}%</span>
             </div>
             <input
               type="range"
               min="0"
-              max="100"
+              max="1"
+              step="0.01"
               value={settings.instrumentalVolume}
-              onChange={(e) => handleSettingChange("instrumentalVolume", parseInt(e.target.value))}
-              className="w-full accent-primary"
-            />
-          </div>
-          
-          <div className="space-y-1">
-            <div className="flex justify-between text-sm">
-              <label>Harmonies</label>
-              <span>{settings.harmonies}%</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={settings.harmonies}
-              onChange={(e) => handleSettingChange("harmonies", parseInt(e.target.value))}
+              onChange={(e) => handleSettingChange("instrumentalVolume", parseFloat(e.target.value))}
               className="w-full accent-primary"
             />
           </div>
@@ -184,14 +163,15 @@ const MixingConsole = ({ className = "", onSaveMix }: MixingConsoleProps) => {
           <div className="space-y-1">
             <div className="flex justify-between text-sm">
               <label>Reverb</label>
-              <span>{settings.vocalReverb}%</span>
+              <span>{Math.round(settings.reverb * 100)}%</span>
             </div>
             <input
               type="range"
               min="0"
-              max="100"
-              value={settings.vocalReverb}
-              onChange={(e) => handleSettingChange("vocalReverb", parseInt(e.target.value))}
+              max="1"
+              step="0.01"
+              value={settings.reverb}
+              onChange={(e) => handleSettingChange("reverb", parseFloat(e.target.value))}
               className="w-full accent-primary"
             />
           </div>
@@ -199,14 +179,15 @@ const MixingConsole = ({ className = "", onSaveMix }: MixingConsoleProps) => {
           <div className="space-y-1">
             <div className="flex justify-between text-sm">
               <label>Delay</label>
-              <span>{settings.vocalDelay}%</span>
+              <span>{Math.round(settings.delay * 100)}%</span>
             </div>
             <input
               type="range"
               min="0"
-              max="100"
-              value={settings.vocalDelay}
-              onChange={(e) => handleSettingChange("vocalDelay", parseInt(e.target.value))}
+              max="1"
+              step="0.01"
+              value={settings.delay}
+              onChange={(e) => handleSettingChange("delay", parseFloat(e.target.value))}
               className="w-full accent-primary"
             />
           </div>
@@ -214,14 +195,15 @@ const MixingConsole = ({ className = "", onSaveMix }: MixingConsoleProps) => {
           <div className="space-y-1">
             <div className="flex justify-between text-sm">
               <label>Compression</label>
-              <span>{settings.vocalCompression}%</span>
+              <span>{Math.round(settings.compression * 100)}%</span>
             </div>
             <input
               type="range"
               min="0"
-              max="100"
-              value={settings.vocalCompression}
-              onChange={(e) => handleSettingChange("vocalCompression", parseInt(e.target.value))}
+              max="1"
+              step="0.01"
+              value={settings.compression}
+              onChange={(e) => handleSettingChange("compression", parseFloat(e.target.value))}
               className="w-full accent-primary"
             />
           </div>
@@ -235,14 +217,14 @@ const MixingConsole = ({ className = "", onSaveMix }: MixingConsoleProps) => {
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
                 <label>Low</label>
-                <span>{settings.vocalEQ.low > 0 ? `+${settings.vocalEQ.low}` : settings.vocalEQ.low} dB</span>
+                <span>{settings.eq.low > 0 ? `+${settings.eq.low}` : settings.eq.low} dB</span>
               </div>
               <input
                 type="range"
                 min="-12"
                 max="12"
-                value={settings.vocalEQ.low}
-                onChange={(e) => handleSettingChange("vocalEQ", parseInt(e.target.value), "vocalEQ", "low")}
+                value={settings.eq.low}
+                onChange={(e) => handleSettingChange("eq", parseInt(e.target.value), "eq", "low")}
                 className="w-full accent-primary"
               />
             </div>
@@ -250,14 +232,14 @@ const MixingConsole = ({ className = "", onSaveMix }: MixingConsoleProps) => {
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
                 <label>Mid</label>
-                <span>{settings.vocalEQ.mid > 0 ? `+${settings.vocalEQ.mid}` : settings.vocalEQ.mid} dB</span>
+                <span>{settings.eq.mid > 0 ? `+${settings.eq.mid}` : settings.eq.mid} dB</span>
               </div>
               <input
                 type="range"
                 min="-12"
                 max="12"
-                value={settings.vocalEQ.mid}
-                onChange={(e) => handleSettingChange("vocalEQ", parseInt(e.target.value), "vocalEQ", "mid")}
+                value={settings.eq.mid}
+                onChange={(e) => handleSettingChange("eq", parseInt(e.target.value), "eq", "mid")}
                 className="w-full accent-primary"
               />
             </div>
@@ -265,14 +247,14 @@ const MixingConsole = ({ className = "", onSaveMix }: MixingConsoleProps) => {
             <div className="space-y-1">
               <div className="flex justify-between text-sm">
                 <label>High</label>
-                <span>{settings.vocalEQ.high > 0 ? `+${settings.vocalEQ.high}` : settings.vocalEQ.high} dB</span>
+                <span>{settings.eq.high > 0 ? `+${settings.eq.high}` : settings.eq.high} dB</span>
               </div>
               <input
                 type="range"
                 min="-12"
                 max="12"
-                value={settings.vocalEQ.high}
-                onChange={(e) => handleSettingChange("vocalEQ", parseInt(e.target.value), "vocalEQ", "high")}
+                value={settings.eq.high}
+                onChange={(e) => handleSettingChange("eq", parseInt(e.target.value), "eq", "high")}
                 className="w-full accent-primary"
               />
             </div>
@@ -286,13 +268,13 @@ const MixingConsole = ({ className = "", onSaveMix }: MixingConsoleProps) => {
               
               if (i < 5) {
                 // Low range
-                height = 50 + settings.vocalEQ.low * 2;
+                height = 50 + settings.eq.low * 2;
               } else if (i < 10) {
                 // Mid range
-                height = 50 + settings.vocalEQ.mid * 2;
+                height = 50 + settings.eq.mid * 2;
               } else {
                 // High range
-                height = 50 + settings.vocalEQ.high * 2;
+                height = 50 + settings.eq.high * 2;
               }
               
               return (
