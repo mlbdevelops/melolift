@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { Save, Download, Volume, VolumeX, Sliders, Waveform, Mic, Music, BarChart2, Loader, RefreshCw } from "lucide-react";
+import { Save, Download, Volume, VolumeX, Sliders, Activity, Mic, Music, BarChart2, Loader, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import Layout from "../components/Layout";
 import Button from "../components/Button";
@@ -19,7 +19,22 @@ interface Project {
   vocal_url: string | null;
   instrumental_url: string | null;
   mixed_url: string | null;
-  settings: any;
+  settings: {
+    vocalVolume?: number;
+    instrumentalVolume?: number;
+    reverb?: number;
+    delay?: number;
+    compression?: number;
+    highPass?: number;
+    lowPass?: number;
+    pitchCorrection?: number;
+    noiseReduction?: number;
+    harmonizer?: number;
+    stereoWidth?: number;
+    mood?: number;
+    energy?: number;
+    [key: string]: any;
+  } | null;
 }
 
 const Mixing = () => {
@@ -86,17 +101,24 @@ const Mixing = () => {
       setProjectTitle(data.title);
       
       if (data.settings) {
+        // Parse settings properly
+        const settings = typeof data.settings === 'string' 
+          ? JSON.parse(data.settings) 
+          : data.settings;
+          
+        // Update mix parameters
         setMixParams(prev => ({
           ...prev,
-          ...data.settings
+          ...(settings as any)
         }));
         
-        if (data.settings.mood !== undefined) {
-          setMood(data.settings.mood);
+        // Check if mood and energy exist in settings
+        if (settings && 'mood' in settings) {
+          setMood(settings.mood);
         }
         
-        if (data.settings.energy !== undefined) {
-          setEnergy(data.settings.energy);
+        if (settings && 'energy' in settings) {
+          setEnergy(settings.energy);
         }
       }
     } catch (error) {
@@ -519,7 +541,7 @@ const Mixing = () => {
                     {/* Premium features */}
                     <div className={!isPremiumFeature("Advanced vocal alignment") ? "opacity-50" : ""}>
                       <h3 className="font-medium mb-3 flex items-center">
-                        <Waveform className="h-4 w-4 mr-2" />
+                        <Activity className="h-4 w-4 mr-2" />
                         Pitch Correction
                         {!isPremiumFeature("Advanced vocal alignment") && (
                           <span className="ml-2 text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
