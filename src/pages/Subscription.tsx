@@ -31,10 +31,31 @@ const Subscription = () => {
           
         if (error) throw error;
         
-        const formattedPlans = data.map(plan => ({
-          ...plan,
-          features: plan.features.features || []
-        }));
+        const formattedPlans = data.map(plan => {
+          // Handle features safely as an array
+          let featuresArray: string[] = [];
+          
+          // Parse features from the JSON
+          if (plan.features) {
+            if (typeof plan.features === 'string') {
+              // If it's a string, try to parse it
+              try {
+                const parsed = JSON.parse(plan.features);
+                featuresArray = parsed.features || [];
+              } catch {
+                featuresArray = [];
+              }
+            } else if (typeof plan.features === 'object') {
+              // If it's already an object
+              featuresArray = plan.features.features || [];
+            }
+          }
+          
+          return {
+            ...plan,
+            features: featuresArray
+          };
+        });
         
         setPlans(formattedPlans);
       } catch (error) {

@@ -12,6 +12,24 @@ import { useAudioPlayer } from "../hooks/useAudioPlayer";
 import { audioBufferToWav } from "../services/audioService";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { Json } from "@/integrations/supabase/types";
+
+interface MixSettings {
+  vocalVolume?: number;
+  instrumentalVolume?: number;
+  reverb?: number;
+  delay?: number;
+  compression?: number;
+  highPass?: number;
+  lowPass?: number;
+  pitchCorrection?: number;
+  noiseReduction?: number;
+  harmonizer?: number;
+  stereoWidth?: number;
+  mood?: number;
+  energy?: number;
+  [key: string]: any;
+}
 
 interface Project {
   id: string;
@@ -19,22 +37,8 @@ interface Project {
   vocal_url: string | null;
   instrumental_url: string | null;
   mixed_url: string | null;
-  settings: {
-    vocalVolume?: number;
-    instrumentalVolume?: number;
-    reverb?: number;
-    delay?: number;
-    compression?: number;
-    highPass?: number;
-    lowPass?: number;
-    pitchCorrection?: number;
-    noiseReduction?: number;
-    harmonizer?: number;
-    stereoWidth?: number;
-    mood?: number;
-    energy?: number;
-    [key: string]: any;
-  } | null;
+  settings: MixSettings | null;
+  status?: string;
 }
 
 const Mixing = () => {
@@ -97,30 +101,44 @@ const Mixing = () => {
         
       if (error) throw error;
       
-      setProject(data);
-      setProjectTitle(data.title);
+      // Convert the data to the Project type
+      const projectData: Project = {
+        id: data.id,
+        title: data.title,
+        vocal_url: data.vocal_url,
+        instrumental_url: data.instrumental_url,
+        mixed_url: data.mixed_url,
+        settings: null,
+        status: data.status || 'draft'
+      };
       
+      // Handle settings properly
       if (data.settings) {
-        // Parse settings properly
-        const settings = typeof data.settings === 'string' 
-          ? JSON.parse(data.settings) 
-          : data.settings;
+        // Parse settings if it's a string
+        const parsedSettings = typeof data.settings === 'string' 
+          ? JSON.parse(data.settings as string) 
+          : data.settings as MixSettings;
           
+        projectData.settings = parsedSettings;
+        
         // Update mix parameters
         setMixParams(prev => ({
           ...prev,
-          ...(settings as any)
+          ...parsedSettings
         }));
         
         // Check if mood and energy exist in settings
-        if (settings && 'mood' in settings) {
-          setMood(settings.mood);
+        if (parsedSettings && 'mood' in parsedSettings) {
+          setMood(parsedSettings.mood as number);
         }
         
-        if (settings && 'energy' in settings) {
-          setEnergy(settings.energy);
+        if (parsedSettings && 'energy' in parsedSettings) {
+          setEnergy(parsedSettings.energy as number);
         }
       }
+      
+      setProject(projectData);
+      setProjectTitle(data.title);
     } catch (error) {
       console.error("Error loading project:", error);
       toast.error("Failed to load project");

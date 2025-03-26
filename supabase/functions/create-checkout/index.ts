@@ -1,139 +1,142 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
-import Stripe from "https://esm.sh/stripe@13.9.0";
+import Stripe from "https://esm.sh/stripe@12.18.0?target=deno";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 serve(async (req) => {
   // Handle CORS preflight requests
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders, status: 204 });
   }
   
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+    // Get environment variables
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const stripeKey = Deno.env.get('STRIPE_SECRET_KEY') || '';
     
-    if (!stripeSecretKey) {
-      throw new Error("STRIPE_SECRET_KEY is not set");
+    if (!stripeKey) {
+      throw new Error('STRIPE_SECRET_KEY is not set');
     }
     
-    // Create Supabase client
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    
     // Initialize Stripe
-    const stripe = new Stripe(stripeSecretKey, {
-      apiVersion: "2023-10-16",
+    const stripe = new Stripe(stripeKey, {
+      apiVersion: '2023-10-16',
     });
+    
+    // Create Supabase admin client
+    const supabase = createClient(supabaseUrl, supabaseKey);
     
     // Get request data
     const { planId, userId, returnUrl } = await req.json();
     
     if (!planId || !userId || !returnUrl) {
-      return new Response(
-        JSON.stringify({ error: "Missing required parameters" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      throw new Error('Missing required fields');
     }
     
-    // Get the plan details
+    // Get the plan details from the database
     const { data: plan, error: planError } = await supabase
-      .from("subscription_plans")
-      .select("*")
-      .eq("id", planId)
+      .from('subscription_plans')
+      .select('*')
+      .eq('id', planId)
       .single();
-    
+      
     if (planError || !plan) {
-      return new Response(
-        JSON.stringify({ error: "Plan not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      throw new Error('Plan not found');
     }
     
     // Get the user details
-    const { data: userData, error: userError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
+    const { data: userInfo, error: userError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
       .single();
-    
-    if (userError || !userData) {
-      return new Response(
-        JSON.stringify({ error: "User not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      
+    if (userError) {
+      throw new Error('User not found');
     }
     
-    // Create a checkout session
-    let session;
-    
-    try {
-      // In a real implementation, you'd use real Stripe product/price IDs
-      // This is just a mock implementation for demonstration
-      session = {
-        id: `cs_test_${crypto.randomUUID()}`,
-        url: returnUrl, // In a real app, this would be a real Stripe checkout URL
-      };
+    // Get user email from auth.users table
+    const { data: authUser, error: authError } = await supabase
+      .auth.admin.getUserById(userId);
       
-      // In a real app, you'd create a real Stripe checkout session like this:
-      /*
-      session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price: plan.stripe_price_id, // The price ID from Stripe
-            quantity: 1,
-          },
-        ],
-        mode: "subscription",
-        success_url: `${returnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${returnUrl}?canceled=true`,
-        customer_email: userData.email,
-        client_reference_id: userId,
-        metadata: {
-          userId,
-          planId: plan.id,
+    if (authError || !authUser.user) {
+      throw new Error('Auth user not found');
+    }
+    
+    // Use Stripe Price ID if available, otherwise create a dynamic price
+    let priceId = plan.stripe_price_id;
+    
+    if (!priceId) {
+      // Create a one-time price
+      const price = await stripe.prices.create({
+        unit_amount: Math.round(plan.price * 100), // Convert to cents
+        currency: 'usd',
+        product_data: {
+          name: `${plan.name} Plan`,
+          description: plan.description,
+        },
+        recurring: {
+          interval: 'month',
         },
       });
-      */
       
-      // For this example, we'll directly update the user's subscription
-      const { error: updateError } = await supabase
-        .from("user_subscriptions")
-        .update({
-          plan_id: planId,
-          status: "active",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", userId);
+      priceId = price.id;
       
-      if (updateError) {
-        throw updateError;
-      }
-      
-      return new Response(
-        JSON.stringify({ sessionId: session.id, url: session.url }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    } catch (error) {
-      console.error("Error creating checkout session:", error);
-      
-      return new Response(
-        JSON.stringify({ error: "Failed to create checkout session" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      // Save the price ID for future use
+      await supabase
+        .from('subscription_plans')
+        .update({ stripe_price_id: priceId })
+        .eq('id', planId);
     }
+    
+    // Create checkout session
+    const session = await stripe.checkout.sessions.create({
+      customer_email: authUser.user.email,
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      mode: 'subscription',
+      success_url: `${returnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${returnUrl}?canceled=true`,
+      metadata: {
+        userId,
+        planId: planId.toString(),
+      },
+    });
+    
+    // Return the session URL
+    return new Response(
+      JSON.stringify({ url: session.url }),
+      { 
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
+        status: 200 
+      }
+    );
   } catch (error) {
-    console.error("Unexpected error:", error);
+    console.error('Error:', error.message);
     
     return new Response(
-      JSON.stringify({ error: "An unexpected error occurred" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: error.message }),
+      { 
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
+        status: 400 
+      }
     );
   }
 });

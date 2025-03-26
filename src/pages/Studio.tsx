@@ -21,6 +21,7 @@ interface ProjectData {
   instrumental_url: string | null;
   mixed_url: string | null;
   settings: any;
+  status?: string;
 }
 
 const Studio = () => {

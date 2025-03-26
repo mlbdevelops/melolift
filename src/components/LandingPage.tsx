@@ -1,309 +1,313 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowRight, Music, Wand2, Sliders, Mic, Headphones, BarChart2, Check } from 'lucide-react';
+import Button from './Button';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
-import { ArrowRight, Mic, Music, Sliders, Users, BarChart, Download, Check, Lock } from "lucide-react";
-import { Link } from "react-router-dom";
-import Button from "./Button";
-import FeatureCard from "./FeatureCard";
-import AudioVisualizer from "./AudioVisualizer";
-import { useAuth } from "../contexts/AuthContext";
-
-const PricingTier = ({ 
-  name, 
-  price, 
-  features, 
-  isPopular = false,
-  isPremium = false 
-}: { 
-  name: string; 
-  price: number; 
-  features: string[]; 
-  isPopular?: boolean;
-  isPremium?: boolean;
-}) => {
-  const { user } = useAuth();
-  
-  return (
-    <div 
-      className={`glass-card p-6 rounded-xl relative ${
-        isPopular ? "border-2 border-primary/30" : ""
-      } ${
-        isPremium ? "border-2 border-yellow-500/30" : ""
-      }`}
-    >
-      {isPopular && (
-        <div className="absolute top-0 right-0 bg-primary text-white px-4 py-1 text-sm font-medium translate-y-[-50%] rounded-full">
-          Popular
-        </div>
-      )}
-      
-      {isPremium && (
-        <div className="absolute top-0 right-0 bg-yellow-500 text-white px-4 py-1 text-sm font-medium translate-y-[-50%] rounded-full">
-          Best Value
-        </div>
-      )}
-      
-      <h3 className="text-xl font-bold mb-2">{name}</h3>
-      
-      <div className="mb-4">
-        <span className="text-3xl font-bold">
-          ${price.toFixed(2)}
-        </span>
-        {price > 0 && (
-          <span className="text-light-100/50 ml-1">/month</span>
-        )}
-      </div>
-      
-      <ul className="space-y-3 mb-6">
-        {features.map((feature, index) => (
-          <li key={index} className="flex items-start">
-            <Check className="h-5 w-5 text-primary mr-2 mt-0.5 flex-shrink-0" />
-            <span>{feature}</span>
-          </li>
-        ))}
-      </ul>
-      
-      <Link to={user ? "/subscription" : "/auth"}>
-        <Button
-          variant={isPopular || isPremium ? "gradient" : "outline"}
-          className="w-full"
-        >
-          {user ? "Choose Plan" : "Sign Up"}
-        </Button>
-      </Link>
-    </div>
-  );
-};
+interface Plan {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  features: string[];
+}
 
 const LandingPage = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [loading, setLoading] = useState(true);
   
-  return (
-    <div className="min-h-screen">
-      {/* Hero Section */}
-      <section className="relative pt-20 pb-32 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-radial from-accent-blue/20 via-transparent to-transparent opacity-30" />
+  useEffect(() => {
+    const fetchPlans = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("subscription_plans")
+          .select("*")
+          .order("price", { ascending: true });
+          
+        if (error) throw error;
         
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative">
-          <div className="flex flex-col lg:flex-row items-center gap-12">
-            <div className="flex-1 text-center lg:text-left">
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 opacity-0 animate-fade-in">
-                <span className="text-gradient">AI-Powered</span> Vocal <br /> Alignment Studio
-              </h1>
-              
-              <p className="text-xl text-light-100/70 mb-8 max-w-2xl mx-auto lg:mx-0 opacity-0 animate-fade-in" style={{ animationDelay: "200ms" }}>
-                Create professional-sounding music by letting our AI perfectly align your vocals 
-                with instrumentals, match pitch and tempo, and create harmonies.
-              </p>
-              
-              <div className="flex flex-wrap gap-4 justify-center lg:justify-start opacity-0 animate-fade-in" style={{ animationDelay: "400ms" }}>
-                <Link to={user ? "/studio" : "/auth"}>
-                  <Button size="lg" variant="gradient" className="shadow-button-glow">
-                    Start Creating <ArrowRight className="ml-2 h-5 w-5" />
-                  </Button>
-                </Link>
-                
-                <Link to={user ? "/dashboard" : "/auth"}>
-                  <Button size="lg" variant="outline">
-                    Explore Features
-                  </Button>
-                </Link>
-              </div>
-            </div>
+        const formattedPlans = data.map(plan => {
+          // Handle features safely as an array
+          let featuresArray: string[] = [];
+          
+          // Parse features from the JSON
+          if (plan.features) {
+            if (typeof plan.features === 'string') {
+              try {
+                const parsed = JSON.parse(plan.features);
+                featuresArray = parsed.features || [];
+              } catch {
+                featuresArray = [];
+              }
+            } else if (typeof plan.features === 'object') {
+              featuresArray = plan.features.features || [];
+            }
+          }
+          
+          return {
+            ...plan,
+            features: featuresArray
+          };
+        });
+        
+        setPlans(formattedPlans);
+      } catch (error) {
+        console.error("Error fetching plans:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchPlans();
+  }, []);
+  
+  const handleGetStarted = () => {
+    if (user) {
+      navigate('/dashboard');
+    } else {
+      navigate('/auth');
+    }
+  };
+  
+  const handleSubscribe = () => {
+    navigate('/subscription');
+  };
+
+  return (
+    <div className="min-h-screen bg-dark-200 text-light-100">
+      {/* Navigation */}
+      <nav className="py-4 px-6 flex justify-between items-center">
+        <div className="flex items-center">
+          <Music className="h-8 w-8 text-primary mr-2" />
+          <span className="text-xl font-bold">VocalStudio</span>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          {user ? (
+            <Button variant="gradient" onClick={() => navigate('/dashboard')}>
+              Dashboard
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={() => navigate('/auth')}>
+                Log In
+              </Button>
+              <Button variant="gradient" onClick={() => navigate('/auth?signup=true')}>
+                Sign Up
+              </Button>
+            </>
+          )}
+        </div>
+      </nav>
+      
+      {/* Hero Section */}
+      <section className="py-20 px-6">
+        <div className="max-w-5xl mx-auto text-center">
+          <h1 className="text-4xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-primary to-accent-purple text-transparent bg-clip-text">
+            Transform Your Vocals with AI
+          </h1>
+          
+          <p className="text-xl md:text-2xl text-light-100/70 mb-10 max-w-3xl mx-auto">
+            Professional vocal processing and mixing in your browser.
+            No complex software needed.
+          </p>
+          
+          <div className="flex flex-wrap justify-center gap-4">
+            <Button size="lg" variant="gradient" onClick={handleGetStarted}>
+              Get Started
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
             
-            <div className="flex-1 opacity-0 animate-fade-in" style={{ animationDelay: "600ms" }}>
-              <div className="relative">
-                <div className="glass-card rounded-2xl h-72 overflow-hidden">
-                  <AudioVisualizer isPlaying={true} />
-                </div>
-                
-                <div className="absolute top-4 left-4 glass-morphism rounded-lg px-3 py-2 text-sm animate-pulse-subtle">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-primary" />
-                    <span>AI Processing Vocals</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Button size="lg" variant="outline" onClick={() => navigate('#features')}>
+              See Features
+            </Button>
+          </div>
+          
+          <div className="mt-16 relative">
+            <div className="absolute inset-0 bg-gradient-to-t from-dark-200 to-transparent z-10 pointer-events-none" />
+            <img 
+              src="/app-preview.png" 
+              alt="VocalStudio Interface" 
+              className="rounded-lg shadow-2xl border border-white/10 mx-auto"
+            />
           </div>
         </div>
       </section>
       
       {/* Features Section */}
-      <section className="py-20 bg-dark-100">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center mb-4">Key Features</h2>
-          <p className="text-light-100/70 text-center mb-12 max-w-2xl mx-auto">
-            Our powerful AI technology analyzes and adjusts your vocals to create perfect harmony with instrumentals.
-          </p>
-          
-          <div className="content-grid">
-            <FeatureCard
-              title="Vocal Recording & Upload"
-              description="Record vocals directly in the browser or upload existing audio files for processing."
-              icon={<Mic className="h-6 w-6" />}
-              delay={100}
-            />
-            
-            <FeatureCard
-              title="Instrumental Library"
-              description="Browse and select from a variety of instrumentals or upload your own backing tracks."
-              icon={<Music className="h-6 w-6" />}
-              delay={200}
-            />
-            
-            <FeatureCard
-              title="AI Vocal Alignment"
-              description="Our AI automatically aligns your vocals with the instrumental, adjusting timing and pitch."
-              icon={<BarChart className="h-6 w-6" />}
-              delay={300}
-            />
-            
-            <FeatureCard
-              title="Advanced Mixing Console"
-              description="Fine-tune your mix with professional audio controls for the perfect sound."
-              icon={<Sliders className="h-6 w-6" />}
-              delay={400}
-            />
-            
-            <FeatureCard
-              title="Harmonic Layering"
-              description="Add AI-generated harmonies that complement your vocal performance."
-              icon={<Users className="h-6 w-6" />}
-              delay={500}
-            />
-            
-            <FeatureCard
-              title="Export & Share"
-              description="Download your finished tracks in high quality or share them directly."
-              icon={<Download className="h-6 w-6" />}
-              delay={600}
-            />
-          </div>
-        </div>
-      </section>
-      
-      {/* How It Works Section */}
-      <section className="py-20">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center mb-4">How It Works</h2>
-          <p className="text-light-100/70 text-center mb-12 max-w-2xl mx-auto">
-            Create professional-sounding music in just a few simple steps.
-          </p>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="glass-card p-6 text-center">
-              <div className="w-12 h-12 bg-primary/20 text-primary rounded-full flex items-center justify-center mx-auto mb-4">
-                1
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Record or Upload</h3>
-              <p className="text-light-100/70">
-                Record your vocals directly in the app or upload an existing audio file.
-              </p>
-            </div>
-            
-            <div className="glass-card p-6 text-center">
-              <div className="w-12 h-12 bg-primary/20 text-primary rounded-full flex items-center justify-center mx-auto mb-4">
-                2
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Select Instrumental</h3>
-              <p className="text-light-100/70">
-                Choose from our library of instrumentals or upload your own backing track.
-              </p>
-            </div>
-            
-            <div className="glass-card p-6 text-center">
-              <div className="w-12 h-12 bg-primary/20 text-primary rounded-full flex items-center justify-center mx-auto mb-4">
-                3
-              </div>
-              <h3 className="text-xl font-semibold mb-2">AI Alignment</h3>
-              <p className="text-light-100/70">
-                Our AI will automatically align your vocals with the instrumental for a perfect match.
-              </p>
-            </div>
+      <section className="py-20 px-6 bg-dark-100" id="features">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">Powerful Features</h2>
+            <p className="text-xl text-light-100/70 max-w-3xl mx-auto">
+              Everything you need to create professional-quality vocals, all in one place.
+            </p>
           </div>
           
-          <div className="mt-12 text-center">
-            <Link to={user ? "/studio" : "/auth"}>
-              <Button size="lg" variant="gradient">
-                Start Now <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="glass-card p-6">
+              <Wand2 className="h-12 w-12 text-primary mb-4" />
+              <h3 className="text-xl font-bold mb-2">AI Vocal Processing</h3>
+              <p className="text-light-100/70">
+                Our AI automatically enhances your vocals with professional-grade processing.
+              </p>
+            </div>
+            
+            <div className="glass-card p-6">
+              <Sliders className="h-12 w-12 text-primary mb-4" />
+              <h3 className="text-xl font-bold mb-2">Advanced Mixing</h3>
+              <p className="text-light-100/70">
+                Fine-tune your mix with intuitive controls for reverb, delay, EQ, and more.
+              </p>
+            </div>
+            
+            <div className="glass-card p-6">
+              <Mic className="h-12 w-12 text-primary mb-4" />
+              <h3 className="text-xl font-bold mb-2">In-Browser Recording</h3>
+              <p className="text-light-100/70">
+                Record vocals directly in your browser with low-latency monitoring.
+              </p>
+            </div>
+            
+            <div className="glass-card p-6">
+              <Headphones className="h-12 w-12 text-primary mb-4" />
+              <h3 className="text-xl font-bold mb-2">Beat Matching</h3>
+              <p className="text-light-100/70">
+                Automatically align your vocals with any instrumental track.
+              </p>
+            </div>
+            
+            <div className="glass-card p-6">
+              <BarChart2 className="h-12 w-12 text-primary mb-4" />
+              <h3 className="text-xl font-bold mb-2">Real-time Visualization</h3>
+              <p className="text-light-100/70">
+                See your audio with beautiful waveforms and spectral displays.
+              </p>
+            </div>
+            
+            <div className="glass-card p-6">
+              <Music className="h-12 w-12 text-primary mb-4" />
+              <h3 className="text-xl font-bold mb-2">GroovePad</h3>
+              <p className="text-light-100/70">
+                Adjust the mood and energy of your mix with our intuitive GroovePad.
+              </p>
+            </div>
           </div>
         </div>
       </section>
       
       {/* Pricing Section */}
-      <section className="py-20 bg-dark-100" id="pricing">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center mb-4">Choose Your Plan</h2>
-          <p className="text-light-100/70 text-center mb-12 max-w-2xl mx-auto">
-            Select the perfect plan for your music production needs. Upgrade anytime.
-          </p>
+      <section className="py-16 bg-dark-200" id="pricing">
+        <div className="container mx-auto px-4">
+          <div className="text-center max-w-3xl mx-auto mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">Choose Your Plan</h2>
+            <p className="text-light-100/70">
+              Unlock premium features to take your music production to the next level.
+              Choose the plan that best suits your needs.
+            </p>
+          </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            <PricingTier
-              name="Free"
-              price={0}
-              features={[
-                "Basic vocal alignment",
-                "Up to 5 projects",
-                "Standard audio quality",
-                "Basic mixing tools",
-                "Manual processing"
-              ]}
-            />
-            
-            <PricingTier
-              name="Pro"
-              price={9.99}
-              features={[
-                "Advanced vocal alignment",
-                "Unlimited projects",
-                "High-quality audio",
-                "Advanced mixing tools",
-                "AI suggestions",
-                "Noise reduction",
-                "Extended groove pad"
-              ]}
-              isPopular
-            />
-            
-            <PricingTier
-              name="Premium"
-              price={19.99}
-              features={[
-                "Professional vocal alignment",
-                "Unlimited projects",
-                "Studio-quality audio",
-                "Professional mixing console",
-                "Priority AI processing",
-                "Advanced noise reduction",
-                "Full mixing suite",
-                "Mix exporting in multiple formats",
-                "Priority support"
-              ]}
-              isPremium
-            />
+            {plans.map((plan) => {
+              const isPro = plan.name === "Pro";
+              const isPremium = plan.name === "Premium";
+              
+              return (
+                <div
+                  key={plan.id}
+                  className={`glass-card relative overflow-hidden rounded-xl ${
+                    isPro ? "border-primary/50 border-2" : ""
+                  } ${isPremium ? "border-accent-gold/50 border-2" : ""}`}
+                >
+                  {isPro && (
+                    <div className="absolute top-0 right-0 bg-primary text-white px-4 py-1 text-sm font-medium">
+                      Popular
+                    </div>
+                  )}
+                  {isPremium && (
+                    <div className="absolute top-0 right-0 bg-accent-gold text-white px-4 py-1 text-sm font-medium">
+                      Best Value
+                    </div>
+                  )}
+                  
+                  <div className="p-6">
+                    <h3 className="text-xl font-bold mb-2">{plan.name}</h3>
+                    <p className="text-light-100/70 mb-4">{plan.description}</p>
+                    
+                    <div className="mb-6">
+                      <span className="text-3xl font-bold">
+                        ${plan.price === 0 ? "0" : plan.price.toFixed(2)}
+                      </span>
+                      {plan.price > 0 && (
+                        <span className="text-light-100/50 ml-1">/month</span>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-3 mb-8">
+                      {plan.features.map((feature, index) => (
+                        <div key={index} className="flex items-start">
+                          <Check className="h-5 w-5 text-primary mr-2 mt-0.5 flex-shrink-0" />
+                          <span>{feature}</span>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <Button
+                      variant={isPro || isPremium ? "gradient" : "default"}
+                      className="w-full"
+                      onClick={handleSubscribe}
+                    >
+                      {plan.price === 0 ? "Get Started" : "Subscribe"}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
       
-      {/* Testimonial/CTA Section */}
-      <section className="py-20">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-3xl font-bold mb-6">Ready to Transform Your Music?</h2>
-            <p className="text-xl text-light-100/70 mb-8">
-              Join thousands of musicians who are already using MelodyAligner to create professional-quality tracks.
-            </p>
-            
-            <Link to={user ? "/dashboard" : "/auth"}>
-              <Button size="lg" variant="gradient" className="shadow-button-glow">
-                Get Started Free
-              </Button>
-            </Link>
-          </div>
+      {/* CTA Section */}
+      <section className="py-20 px-6">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-3xl md:text-4xl font-bold mb-6">Ready to Transform Your Sound?</h2>
+          <p className="text-xl text-light-100/70 mb-10 max-w-3xl mx-auto">
+            Join thousands of musicians who are creating professional-quality vocals with VocalStudio.
+          </p>
+          
+          <Button size="lg" variant="gradient" onClick={handleGetStarted}>
+            Get Started Now
+            <ArrowRight className="ml-2 h-5 w-5" />
+          </Button>
         </div>
       </section>
+      
+      {/* Footer */}
+      <footer className="py-10 px-6 bg-dark-100">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <div className="flex items-center mb-6 md:mb-0">
+              <Music className="h-6 w-6 text-primary mr-2" />
+              <span className="text-lg font-bold">VocalStudio</span>
+            </div>
+            
+            <div className="flex flex-wrap gap-6 text-light-100/70">
+              <a href="#features" className="hover:text-primary transition-colors">Features</a>
+              <a href="#pricing" className="hover:text-primary transition-colors">Pricing</a>
+              <a href="#" className="hover:text-primary transition-colors">Terms</a>
+              <a href="#" className="hover:text-primary transition-colors">Privacy</a>
+              <a href="#" className="hover:text-primary transition-colors">Contact</a>
+            </div>
+          </div>
+          
+          <div className="mt-8 pt-8 border-t border-white/10 text-center text-light-100/50 text-sm">
+            &copy; {new Date().getFullYear()} VocalStudio. All rights reserved.
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };
