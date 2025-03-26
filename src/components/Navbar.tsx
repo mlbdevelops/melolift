@@ -1,13 +1,16 @@
 
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { Music, Settings, User, Menu, X } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Music, Settings, User, Menu, X, LogOut } from "lucide-react";
 import Button from "./Button";
+import { useAuth } from "../contexts/AuthContext";
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, profile, signOut } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -30,6 +33,12 @@ const Navbar = () => {
     { name: "Settings", path: "/settings", icon: <Settings className="h-5 w-5" /> },
   ];
 
+  const handleLogout = async () => {
+    await signOut();
+    setIsMobileMenuOpen(false);
+    navigate("/");
+  };
+
   return (
     <nav
       className={cn(
@@ -51,27 +60,58 @@ const Navbar = () => {
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-6">
-            {navLinks.map((link) => (
-              <Link
-                key={link.name}
-                to={link.path}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-md transition-all",
-                  location.pathname === link.path
-                    ? "bg-primary/10 text-primary"
-                    : "text-foreground/80 hover:text-foreground hover:bg-white/5"
-                )}
-              >
-                {link.icon}
-                <span>{link.name}</span>
-              </Link>
-            ))}
-            
-            {isHomePage ? (
-              <Link to="/dashboard">
-                <Button>Get Started</Button>
-              </Link>
-            ) : null}
+            {user ? (
+              <>
+                {navLinks.map((link) => (
+                  <Link
+                    key={link.name}
+                    to={link.path}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded-md transition-all",
+                      location.pathname === link.path
+                        ? "bg-primary/10 text-primary"
+                        : "text-foreground/80 hover:text-foreground hover:bg-white/5"
+                    )}
+                  >
+                    {link.icon}
+                    <span>{link.name}</span>
+                  </Link>
+                ))}
+                
+                <div className="flex items-center gap-3 ml-2">
+                  <div className="flex flex-col items-end">
+                    <span className="font-medium">
+                      {profile?.display_name || "User"}
+                    </span>
+                    <Link to="/subscription" className="text-xs text-primary hover:underline">
+                      Manage Subscription
+                    </Link>
+                  </div>
+                  
+                  <button 
+                    onClick={handleLogout}
+                    className="text-light-100/70 hover:text-light-100 p-2 rounded-full hover:bg-white/5 transition-colors"
+                  >
+                    <LogOut className="h-5 w-5" />
+                  </button>
+                </div>
+              </>
+            ) : (
+              isHomePage ? (
+                <>
+                  <Link to="/auth">
+                    <Button variant="outline">Sign In</Button>
+                  </Link>
+                  <Link to="/auth">
+                    <Button>Get Started</Button>
+                  </Link>
+                </>
+              ) : (
+                <Link to="/auth">
+                  <Button>Sign In</Button>
+                </Link>
+              )
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -89,32 +129,63 @@ const Navbar = () => {
       {isMobileMenuOpen && (
         <div className="md:hidden glass-morphism mt-4 mx-4 rounded-xl overflow-hidden animate-fade-in">
           <div className="flex flex-col py-4">
-            {navLinks.map((link, index) => (
-              <Link
-                key={link.name}
-                to={link.path}
-                className={cn(
-                  "flex items-center gap-2 px-6 py-4 transition-all",
-                  location.pathname === link.path
-                    ? "bg-primary/10 text-primary"
-                    : "text-foreground/80 hover:text-foreground hover:bg-white/5"
-                )}
-                style={{ animationDelay: `${(index + 1) * 50}ms` }}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                {link.icon}
-                <span>{link.name}</span>
-              </Link>
-            ))}
-            
-            {isHomePage && (
-              <div className="px-4 py-3 mt-2">
+            {user ? (
+              <>
+                <div className="px-6 py-4 border-b border-white/10 mb-2">
+                  <div className="font-medium text-lg">
+                    {profile?.display_name || "User"}
+                  </div>
+                  <Link 
+                    to="/subscription" 
+                    className="text-sm text-primary hover:underline"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Manage Subscription
+                  </Link>
+                </div>
+                
+                {navLinks.map((link, index) => (
+                  <Link
+                    key={link.name}
+                    to={link.path}
+                    className={cn(
+                      "flex items-center gap-2 px-6 py-4 transition-all",
+                      location.pathname === link.path
+                        ? "bg-primary/10 text-primary"
+                        : "text-foreground/80 hover:text-foreground hover:bg-white/5"
+                    )}
+                    style={{ animationDelay: `${(index + 1) * 50}ms` }}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    {link.icon}
+                    <span>{link.name}</span>
+                  </Link>
+                ))}
+                
+                <button
+                  className="flex items-center gap-2 px-6 py-4 text-left text-foreground/80 hover:text-foreground hover:bg-white/5 transition-all mt-2 border-t border-white/10"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="h-5 w-5" />
+                  <span>Sign Out</span>
+                </button>
+              </>
+            ) : (
+              <div className="px-4 py-3">
                 <Link 
-                  to="/dashboard" 
+                  to="/auth" 
+                  className="block mb-2"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <Button className="w-full">Sign In</Button>
+                </Link>
+                
+                <Link 
+                  to="/auth?mode=signup" 
                   className="block"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
-                  <Button className="w-full">Get Started</Button>
+                  <Button variant="outline" className="w-full">Create Account</Button>
                 </Link>
               </div>
             )}

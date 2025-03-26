@@ -1,11 +1,23 @@
-// Update this page (the content is just a fallback if you fail to update the page)
 
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Loader } from 'lucide-react';
+
+// This page serves as a redirection component
 const Index = () => {
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    // Redirect to the landing page
+    navigate('/', { replace: true });
+  }, [navigate]);
+  
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+    <div className="min-h-screen flex items-center justify-center bg-dark-200">
       <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-gray-600">Start building your amazing project here!</p>
+        <Loader className="h-10 w-10 animate-spin text-primary mx-auto mb-4" />
+        <h1 className="text-2xl font-bold mb-2">Redirecting...</h1>
+        <p className="text-light-100/70">Please wait while we direct you to the main page</p>
       </div>
     </div>
   );

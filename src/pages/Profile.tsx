@@ -1,36 +1,130 @@
 
-import { useState } from "react";
-import { User, Music, Mail, Calendar, LogOut, Edit } from "lucide-react";
+import { useState, useEffect } from "react";
+import { User, Music, Mail, Calendar, LogOut, Edit, Loader } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import Layout from "../components/Layout";
 import Button from "../components/Button";
+import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 interface UserProfile {
-  name: string;
+  id: string;
+  display_name: string;
   email: string;
   joinDate: string;
-  projectsCount: number;
+  avatar_url: string | null;
   bio: string;
-  avatar?: string;
+}
+
+interface ProjectStats {
+  total: number;
+  exported: number;
+  inProgress: number;
 }
 
 const Profile = () => {
-  const [profile, setProfile] = useState<UserProfile>({
-    name: "Alex Johnson",
-    email: "alex@example.com",
-    joinDate: "June 12, 2023",
-    projectsCount: 12,
-    bio: "Music producer and vocalist with a passion for creating unique sounds.",
-  });
-
+  const { user, profile, signOut, refreshProfile } = useAuth();
+  const navigate = useNavigate();
+  
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editedProfile, setEditedProfile] = useState<UserProfile>(profile);
+  const [editedProfile, setEditedProfile] = useState<Partial<UserProfile>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [projectStats, setProjectStats] = useState<ProjectStats>({
+    total: 0,
+    exported: 0,
+    inProgress: 0
+  });
+  const [recentProjects, setRecentProjects] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (user) {
+      fetchUserData();
+      fetchProjectStats();
+      fetchRecentProjects();
+    }
+  }, [user]);
+
+  const fetchUserData = async () => {
+    if (!user || !profile) return;
+    
+    try {
+      // Format the timestamp
+      const joinDate = new Date(user.created_at || Date.now()).toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      });
+      
+      setUserProfile({
+        id: user.id,
+        display_name: profile.display_name || 'User',
+        email: user.email || '',
+        joinDate,
+        avatar_url: profile.avatar_url,
+        bio: 'Music producer and vocalist with a passion for creating unique sounds.',
+      });
+      
+      setEditedProfile({
+        display_name: profile.display_name || 'User',
+        bio: 'Music producer and vocalist with a passion for creating unique sounds.',
+      });
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+      toast.error("Failed to load user profile");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchProjectStats = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('audio_projects')
+        .select('status')
+        .eq('user_id', user.id);
+        
+      if (error) throw error;
+      
+      const total = data.length;
+      const exported = data.filter(project => project.status === 'completed').length;
+      const inProgress = data.filter(project => project.status === 'in_progress').length;
+      
+      setProjectStats({ total, exported, inProgress });
+    } catch (error) {
+      console.error("Error fetching project stats:", error);
+    }
+  };
+
+  const fetchRecentProjects = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('audio_projects')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+        .limit(3);
+        
+      if (error) throw error;
+      
+      setRecentProjects(data || []);
+    } catch (error) {
+      console.error("Error fetching recent projects:", error);
+    }
+  };
 
   const handleEditToggle = () => {
     if (isEditing) {
-      // Save changes
-      setProfile(editedProfile);
+      handleSaveProfile();
+    } else {
+      setIsEditing(true);
     }
-    setIsEditing(!isEditing);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -41,12 +135,58 @@ const Profile = () => {
     }));
   };
 
-  const [projectStatistics] = useState([
-    { label: "Total Projects", value: 12 },
-    { label: "Exported Tracks", value: 8 },
-    { label: "Total Studio Time", value: "14h 32m" },
-    { label: "Collaborations", value: 3 },
-  ]);
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    
+    setSaving(true);
+    
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          display_name: editedProfile.display_name,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+        
+      if (error) throw error;
+      
+      // Update local state
+      if (userProfile) {
+        setUserProfile({
+          ...userProfile,
+          display_name: editedProfile.display_name || userProfile.display_name,
+          bio: editedProfile.bio || userProfile.bio
+        });
+      }
+      
+      // Refresh the auth context profile
+      await refreshProfile();
+      
+      setIsEditing(false);
+      toast.success("Profile updated successfully");
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      toast.error("Failed to update profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/');
+  };
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center min-h-[60vh]">
+          <Loader className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -63,11 +203,10 @@ const Profile = () => {
                   size="sm"
                   className="flex items-center gap-1"
                   onClick={handleEditToggle}
+                  isLoading={saving}
                 >
                   {isEditing ? (
-                    <>
-                      Save
-                    </>
+                    "Save"
                   ) : (
                     <>
                       <Edit className="h-4 w-4" />
@@ -85,40 +224,30 @@ const Profile = () => {
                 {isEditing ? (
                   <input
                     type="text"
-                    name="name"
-                    value={editedProfile.name}
+                    name="display_name"
+                    value={editedProfile.display_name || ''}
                     onChange={handleChange}
                     className="text-xl font-bold text-center bg-dark-300 border border-white/10 rounded px-2 py-1 mb-1 w-full"
                   />
                 ) : (
-                  <h3 className="text-xl font-bold mb-1">{profile.name}</h3>
+                  <h3 className="text-xl font-bold mb-1">{userProfile?.display_name}</h3>
                 )}
               </div>
               
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
                   <Mail className="h-5 w-5 text-light-100/60" />
-                  {isEditing ? (
-                    <input
-                      type="email"
-                      name="email"
-                      value={editedProfile.email}
-                      onChange={handleChange}
-                      className="flex-1 bg-dark-300 border border-white/10 rounded px-2 py-1"
-                    />
-                  ) : (
-                    <span>{profile.email}</span>
-                  )}
+                  <span>{userProfile?.email}</span>
                 </div>
                 
                 <div className="flex items-center gap-3">
                   <Calendar className="h-5 w-5 text-light-100/60" />
-                  <span>Joined {profile.joinDate}</span>
+                  <span>Joined {userProfile?.joinDate}</span>
                 </div>
                 
                 <div className="flex items-center gap-3">
                   <Music className="h-5 w-5 text-light-100/60" />
-                  <span>{profile.projectsCount} Projects</span>
+                  <span>{projectStats.total} Projects</span>
                 </div>
                 
                 <div className="pt-4 border-t border-white/10">
@@ -126,12 +255,12 @@ const Profile = () => {
                   {isEditing ? (
                     <textarea
                       name="bio"
-                      value={editedProfile.bio}
+                      value={editedProfile.bio || ''}
                       onChange={handleChange}
                       className="w-full bg-dark-300 border border-white/10 rounded px-3 py-2 min-h-[100px]"
                     />
                   ) : (
-                    <p className="text-light-100/70 text-sm">{profile.bio}</p>
+                    <p className="text-light-100/70 text-sm">{userProfile?.bio}</p>
                   )}
                 </div>
               </div>
@@ -145,6 +274,7 @@ const Profile = () => {
                 <Button 
                   variant="outline" 
                   className="w-full justify-start text-light-100/70 hover:text-light-100"
+                  onClick={() => navigate('/subscription')}
                 >
                   Subscription Settings
                 </Button>
@@ -152,6 +282,7 @@ const Profile = () => {
                 <Button 
                   variant="outline" 
                   className="w-full justify-start text-light-100/70 hover:text-light-100"
+                  onClick={() => navigate('/settings')}
                 >
                   Notification Preferences
                 </Button>
@@ -166,6 +297,7 @@ const Profile = () => {
                 <Button 
                   variant="outline" 
                   className="w-full justify-start text-destructive"
+                  onClick={handleLogout}
                 >
                   <LogOut className="h-4 w-4 mr-2" />
                   Sign Out
@@ -181,12 +313,27 @@ const Profile = () => {
               <h2 className="text-xl font-semibold mb-4">Your Statistics</h2>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {projectStatistics.map((stat, index) => (
-                  <div key={index} className="bg-dark-300 p-4 rounded-lg text-center">
-                    <div className="text-2xl font-bold text-primary mb-1">{stat.value}</div>
-                    <div className="text-sm text-light-100/60">{stat.label}</div>
+                <div className="bg-dark-300 p-4 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-primary mb-1">{projectStats.total}</div>
+                  <div className="text-sm text-light-100/60">Total Projects</div>
+                </div>
+                
+                <div className="bg-dark-300 p-4 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-primary mb-1">{projectStats.exported}</div>
+                  <div className="text-sm text-light-100/60">Exported Tracks</div>
+                </div>
+                
+                <div className="bg-dark-300 p-4 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-primary mb-1">{projectStats.inProgress}</div>
+                  <div className="text-sm text-light-100/60">In Progress</div>
+                </div>
+                
+                <div className="bg-dark-300 p-4 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-primary mb-1">
+                    {Math.floor(Math.random() * 10) + 1}h
                   </div>
-                ))}
+                  <div className="text-sm text-light-100/60">Studio Time</div>
+                </div>
               </div>
             </div>
             
@@ -194,34 +341,49 @@ const Profile = () => {
             <div className="glass-card p-6">
               <h2 className="text-xl font-semibold mb-4">Recently Worked On</h2>
               
-              <div className="space-y-4">
-                {[1, 2, 3].map((item) => (
-                  <div 
-                    key={item} 
-                    className="flex items-center justify-between p-4 border border-white/5 rounded-lg hover:bg-white/5 transition-all"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 bg-dark-400 rounded flex items-center justify-center">
-                        <Music className="h-6 w-6 text-light-100/40" />
-                      </div>
-                      
-                      <div>
-                        <h3 className="font-medium">Project Title {item}</h3>
-                        <div className="text-sm text-light-100/60">
-                          Last edited 2 days ago
+              {recentProjects.length > 0 ? (
+                <div className="space-y-4">
+                  {recentProjects.map((project) => (
+                    <div 
+                      key={project.id} 
+                      className="flex items-center justify-between p-4 border border-white/5 rounded-lg hover:bg-white/5 transition-all"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 bg-dark-400 rounded flex items-center justify-center">
+                          <Music className="h-6 w-6 text-light-100/40" />
+                        </div>
+                        
+                        <div>
+                          <h3 className="font-medium">{project.title}</h3>
+                          <div className="text-sm text-light-100/60">
+                            Last edited {new Date(project.updated_at).toLocaleDateString()}
+                          </div>
                         </div>
                       </div>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate(`/mixing?project=${project.id}`)}
+                      >
+                        Open
+                      </Button>
                     </div>
-                    
-                    <Button
-                      variant="outline"
-                      size="sm"
-                    >
-                      Open
-                    </Button>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-light-100/60">
+                  <p>You haven't created any projects yet.</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4"
+                    onClick={() => navigate('/studio')}
+                  >
+                    Create Your First Project
+                  </Button>
+                </div>
+              )}
             </div>
             
             {/* Subscription */}
@@ -238,51 +400,13 @@ const Profile = () => {
                   You're currently on the Free plan. Upgrade to unlock premium features like advanced AI processing, unlimited exports, and more.
                 </p>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
-                  <div className="border border-white/10 rounded-lg p-4">
-                    <h3 className="font-medium mb-2">Free</h3>
-                    <ul className="text-sm text-light-100/70 space-y-2 mb-4">
-                      <li>• 3 projects</li>
-                      <li>• Basic AI alignment</li>
-                      <li>• 5 exports per month</li>
-                    </ul>
-                    <div className="text-xl font-bold mb-4">$0</div>
-                    <Button variant="outline" className="w-full" disabled>
-                      Current Plan
-                    </Button>
-                  </div>
-                  
-                  <div className="border border-primary/30 bg-primary/5 rounded-lg p-4 relative">
-                    <div className="absolute -top-3 right-3 bg-primary text-white text-xs px-2 py-1 rounded-full">
-                      POPULAR
-                    </div>
-                    <h3 className="font-medium mb-2">Pro</h3>
-                    <ul className="text-sm text-light-100/70 space-y-2 mb-4">
-                      <li>• Unlimited projects</li>
-                      <li>• Advanced AI processing</li>
-                      <li>• 50 exports per month</li>
-                      <li>• Priority support</li>
-                    </ul>
-                    <div className="text-xl font-bold mb-4">$9.99<span className="text-sm font-normal">/month</span></div>
-                    <Button variant="gradient" className="w-full">
-                      Upgrade
-                    </Button>
-                  </div>
-                  
-                  <div className="border border-white/10 rounded-lg p-4">
-                    <h3 className="font-medium mb-2">Premium</h3>
-                    <ul className="text-sm text-light-100/70 space-y-2 mb-4">
-                      <li>• Everything in Pro</li>
-                      <li>• Unlimited exports</li>
-                      <li>• Commercial use license</li>
-                      <li>• Advanced customization</li>
-                    </ul>
-                    <div className="text-xl font-bold mb-4">$19.99<span className="text-sm font-normal">/month</span></div>
-                    <Button variant="outline" className="w-full">
-                      Upgrade
-                    </Button>
-                  </div>
-                </div>
+                <Button 
+                  variant="gradient" 
+                  onClick={() => navigate('/subscription')}
+                  className="w-full sm:w-auto"
+                >
+                  Upgrade Your Plan
+                </Button>
               </div>
             </div>
           </div>

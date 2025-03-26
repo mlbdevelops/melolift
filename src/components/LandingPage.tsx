@@ -1,11 +1,81 @@
 
-import { ArrowRight, Mic, Music, Sliders, Users, BarChart, Download } from "lucide-react";
+import { ArrowRight, Mic, Music, Sliders, Users, BarChart, Download, Check, Lock } from "lucide-react";
 import { Link } from "react-router-dom";
 import Button from "./Button";
 import FeatureCard from "./FeatureCard";
 import AudioVisualizer from "./AudioVisualizer";
+import { useAuth } from "../contexts/AuthContext";
+
+const PricingTier = ({ 
+  name, 
+  price, 
+  features, 
+  isPopular = false,
+  isPremium = false 
+}: { 
+  name: string; 
+  price: number; 
+  features: string[]; 
+  isPopular?: boolean;
+  isPremium?: boolean;
+}) => {
+  const { user } = useAuth();
+  
+  return (
+    <div 
+      className={`glass-card p-6 rounded-xl relative ${
+        isPopular ? "border-2 border-primary/30" : ""
+      } ${
+        isPremium ? "border-2 border-yellow-500/30" : ""
+      }`}
+    >
+      {isPopular && (
+        <div className="absolute top-0 right-0 bg-primary text-white px-4 py-1 text-sm font-medium translate-y-[-50%] rounded-full">
+          Popular
+        </div>
+      )}
+      
+      {isPremium && (
+        <div className="absolute top-0 right-0 bg-yellow-500 text-white px-4 py-1 text-sm font-medium translate-y-[-50%] rounded-full">
+          Best Value
+        </div>
+      )}
+      
+      <h3 className="text-xl font-bold mb-2">{name}</h3>
+      
+      <div className="mb-4">
+        <span className="text-3xl font-bold">
+          ${price.toFixed(2)}
+        </span>
+        {price > 0 && (
+          <span className="text-light-100/50 ml-1">/month</span>
+        )}
+      </div>
+      
+      <ul className="space-y-3 mb-6">
+        {features.map((feature, index) => (
+          <li key={index} className="flex items-start">
+            <Check className="h-5 w-5 text-primary mr-2 mt-0.5 flex-shrink-0" />
+            <span>{feature}</span>
+          </li>
+        ))}
+      </ul>
+      
+      <Link to={user ? "/subscription" : "/auth"}>
+        <Button
+          variant={isPopular || isPremium ? "gradient" : "outline"}
+          className="w-full"
+        >
+          {user ? "Choose Plan" : "Sign Up"}
+        </Button>
+      </Link>
+    </div>
+  );
+};
 
 const LandingPage = () => {
+  const { user } = useAuth();
+  
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
@@ -25,13 +95,13 @@ const LandingPage = () => {
               </p>
               
               <div className="flex flex-wrap gap-4 justify-center lg:justify-start opacity-0 animate-fade-in" style={{ animationDelay: "400ms" }}>
-                <Link to="/studio">
+                <Link to={user ? "/studio" : "/auth"}>
                   <Button size="lg" variant="gradient" className="shadow-button-glow">
                     Start Creating <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
                 
-                <Link to="/dashboard">
+                <Link to={user ? "/dashboard" : "/auth"}>
                   <Button size="lg" variant="outline">
                     Explore Features
                   </Button>
@@ -152,7 +222,7 @@ const LandingPage = () => {
           </div>
           
           <div className="mt-12 text-center">
-            <Link to="/studio">
+            <Link to={user ? "/studio" : "/auth"}>
               <Button size="lg" variant="gradient">
                 Start Now <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
@@ -161,8 +231,64 @@ const LandingPage = () => {
         </div>
       </section>
       
+      {/* Pricing Section */}
+      <section className="py-20 bg-dark-100" id="pricing">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-3xl font-bold text-center mb-4">Choose Your Plan</h2>
+          <p className="text-light-100/70 text-center mb-12 max-w-2xl mx-auto">
+            Select the perfect plan for your music production needs. Upgrade anytime.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            <PricingTier
+              name="Free"
+              price={0}
+              features={[
+                "Basic vocal alignment",
+                "Up to 5 projects",
+                "Standard audio quality",
+                "Basic mixing tools",
+                "Manual processing"
+              ]}
+            />
+            
+            <PricingTier
+              name="Pro"
+              price={9.99}
+              features={[
+                "Advanced vocal alignment",
+                "Unlimited projects",
+                "High-quality audio",
+                "Advanced mixing tools",
+                "AI suggestions",
+                "Noise reduction",
+                "Extended groove pad"
+              ]}
+              isPopular
+            />
+            
+            <PricingTier
+              name="Premium"
+              price={19.99}
+              features={[
+                "Professional vocal alignment",
+                "Unlimited projects",
+                "Studio-quality audio",
+                "Professional mixing console",
+                "Priority AI processing",
+                "Advanced noise reduction",
+                "Full mixing suite",
+                "Mix exporting in multiple formats",
+                "Priority support"
+              ]}
+              isPremium
+            />
+          </div>
+        </div>
+      </section>
+      
       {/* Testimonial/CTA Section */}
-      <section className="py-20 bg-dark-100">
+      <section className="py-20">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl mx-auto text-center">
             <h2 className="text-3xl font-bold mb-6">Ready to Transform Your Music?</h2>
@@ -170,7 +296,7 @@ const LandingPage = () => {
               Join thousands of musicians who are already using MelodyAligner to create professional-quality tracks.
             </p>
             
-            <Link to="/dashboard">
+            <Link to={user ? "/dashboard" : "/auth"}>
               <Button size="lg" variant="gradient" className="shadow-button-glow">
                 Get Started Free
               </Button>
