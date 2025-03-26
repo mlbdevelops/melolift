@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Check, Shield, Cloud, Music, BarChart, Clock, Waves, Download } from "lucide-react";
 import { toast } from "sonner";
@@ -38,13 +39,20 @@ const Subscription = () => {
             try {
               if (typeof plan.features === 'string') {
                 const parsed = JSON.parse(plan.features);
-                featuresArray = Array.isArray(parsed) ? parsed : (parsed.features || []);
+                // Type assertion to any to handle different possible formats
+                const parsedFeatures = parsed as any;
+                featuresArray = Array.isArray(parsedFeatures) 
+                  ? parsedFeatures.map(f => String(f)) 
+                  : (parsedFeatures.features ? parsedFeatures.features.map((f: any) => String(f)) : []);
               } 
               else if (typeof plan.features === 'object') {
                 if (Array.isArray(plan.features)) {
-                  featuresArray = plan.features;
+                  featuresArray = plan.features.map(item => String(item));
                 } else {
-                  featuresArray = plan.features.features || [];
+                  const objFeatures = plan.features as any;
+                  featuresArray = objFeatures.features 
+                    ? objFeatures.features.map((f: any) => String(f)) 
+                    : Object.values(plan.features).map(f => String(f));
                 }
               }
             } catch (e) {

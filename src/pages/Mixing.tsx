@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Activity, Play, Pause, Save, Download, Upload, Trash2, Settings as SettingsIcon } from "lucide-react";
@@ -95,7 +96,8 @@ const Mixing = () => {
           } 
           // If settings is already an object
           else if (typeof data.settings === 'object') {
-            parsedSettings = data.settings as MixSettings;
+            // Cast to unknown first, then to MixSettings for safety
+            parsedSettings = data.settings as unknown as MixSettings;
           }
         } catch (e) {
           console.error("Error parsing settings:", e);
@@ -148,7 +150,7 @@ const Mixing = () => {
       const { error } = await supabase
         .from("audio_projects")
         .update({
-          settings: settings,
+          settings: settings as unknown as Json,
           updated_at: new Date().toISOString()
         })
         .eq("id", project.id);
@@ -205,12 +207,12 @@ const Mixing = () => {
           </div>
           
           <div className="space-x-2">
-            <Button variant="secondary" onClick={() => setShowSettings(!showSettings)}>
+            <Button variant="outline" onClick={() => setShowSettings(!showSettings)}>
               <SettingsIcon className="h-4 w-4 mr-2" />
               Settings
             </Button>
             
-            <Button variant="primary" onClick={handleSaveProject} isLoading={savingProject}>
+            <Button variant="default" onClick={handleSaveProject} isLoading={savingProject}>
               <Save className="h-4 w-4 mr-2" />
               Save Project
             </Button>
