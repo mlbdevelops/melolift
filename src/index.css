@@ -45,6 +45,13 @@
   body {
     @apply bg-dark-200 text-light-100 antialiased;
     font-family: 'Inter', sans-serif;
+    font-size: 16px;
+  }
+
+  @media (max-width: 640px) {
+    body {
+      font-size: 14px;
+    }
   }
 
   html {
@@ -116,5 +123,22 @@
   
   .waveform-line {
     @apply w-1 h-full bg-accent-blue rounded-full;
+  }
+
+  /* Responsive utilities */
+  .mobile-only {
+    @apply block md:hidden;
+  }
+  
+  .desktop-only {
+    @apply hidden md:block;
+  }
+  
+  .responsive-container {
+    @apply w-full px-4 sm:px-6 md:px-8 max-w-screen-2xl mx-auto;
+  }
+  
+  .responsive-grid {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4;
   }
 }

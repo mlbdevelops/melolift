@@ -22,6 +22,7 @@ serve(async (req) => {
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY') || '';
     
     if (!stripeKey) {
+      console.error('STRIPE_SECRET_KEY is not set');
       throw new Error('STRIPE_SECRET_KEY is not set');
     }
     
@@ -117,9 +118,33 @@ serve(async (req) => {
     console.log('Creating checkout session with price ID:', priceId);
     
     try {
+      // Look up existing customer or create new one
+      let customerId: string | undefined;
+      
+      const { data: customers } = await stripe.customers.list({
+        email: authUser.user.email,
+        limit: 1,
+      });
+      
+      if (customers && customers.length > 0) {
+        customerId = customers[0].id;
+        console.log('Found existing customer:', customerId);
+      } else {
+        // Create a new customer
+        const newCustomer = await stripe.customers.create({
+          email: authUser.user.email,
+          name: userInfo.full_name || authUser.user.email,
+          metadata: {
+            userId: userId,
+          },
+        });
+        customerId = newCustomer.id;
+        console.log('Created new customer:', customerId);
+      }
+      
       // Create checkout session
       const session = await stripe.checkout.sessions.create({
-        customer_email: authUser.user.email,
+        customer: customerId,
         line_items: [
           {
             price: priceId,

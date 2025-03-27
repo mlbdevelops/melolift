@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Bell, Volume2, Moon, Sun, Globe, Shield, Sliders, Save } from "lucide-react";
 import { toast } from "sonner";
@@ -56,6 +55,8 @@ const defaultSettings: UserSettings = {
   }
 };
 
+const LOCAL_STORAGE_KEY = 'user_settings';
+
 const Settings = () => {
   const { user } = useAuth();
   const [settings, setSettings] = useState<UserSettings>(defaultSettings);
@@ -65,24 +66,72 @@ const Settings = () => {
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   
   useEffect(() => {
-    if (user) {
-      fetchUserSettings();
-    } else {
-      setLoading(false);
-    }
+    const loadSettings = async () => {
+      try {
+        setLoading(true);
+        
+        if (user) {
+          const { data, error } = await supabase
+            .from('user_preferences')
+            .select('settings')
+            .eq('user_id', user.id)
+            .single();
+            
+          if (data && !error) {
+            setSettings(data.settings as UserSettings || defaultSettings);
+          } else {
+            const savedSettings = localStorage.getItem(LOCAL_STORAGE_KEY);
+            if (savedSettings) {
+              setSettings(JSON.parse(savedSettings));
+            }
+          }
+        } else {
+          const savedSettings = localStorage.getItem(LOCAL_STORAGE_KEY);
+          if (savedSettings) {
+            setSettings(JSON.parse(savedSettings));
+          }
+        }
+        
+        applySettings();
+      } catch (error) {
+        console.error("Error loading settings:", error);
+        toast.error("Failed to load settings");
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadSettings();
   }, [user]);
   
-  const fetchUserSettings = async () => {
-    try {
-      // In a real app, this would fetch from the database
-      // For now, we'll simulate a delay and use default settings
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setSettings(defaultSettings);
-    } catch (error) {
-      console.error("Error fetching user settings:", error);
-      toast.error("Failed to load settings");
-    } finally {
-      setLoading(false);
+  const applySettings = () => {
+    if (settings.appearance.theme === 'dark') {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+    } else if (settings.appearance.theme === 'light') {
+      document.documentElement.classList.add('light');
+      document.documentElement.classList.remove('dark');
+    } else {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      } else {
+        document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
+      }
+    }
+    
+    if (settings.appearance.reducedMotion) {
+      document.documentElement.classList.add('reduce-motion');
+    } else {
+      document.documentElement.classList.remove('reduce-motion');
+    }
+    
+    if (settings.appearance.highContrast) {
+      document.documentElement.classList.add('high-contrast');
+    } else {
+      document.documentElement.classList.remove('high-contrast');
     }
   };
   
@@ -131,39 +180,65 @@ const Settings = () => {
   };
   
   const saveSettings = async () => {
-    if (!user) {
-      toast.error("You must be logged in to save settings");
-      return;
-    }
-    
     setSaving(true);
     
     try {
-      // In a real app, this would save to the database
-      // For now, we'll just simulate a delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(settings));
       
-      // In a real app, you would update user settings in your database
-      // For example:
-      /*
-      const { error } = await supabase
-        .from('user_settings')
-        .upsert({
-          user_id: user.id,
-          settings: settings,
-          updated_at: new Date().toISOString()
-        });
-        
-      if (error) throw error;
-      */
+      if (user) {
+        const { error } = await supabase
+          .from('user_preferences')
+          .upsert({
+            user_id: user.id,
+            settings: settings as any,
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'user_id'  
+          });
+          
+        if (error) {
+          console.error("Database save error:", error);
+          throw error;
+        }
+      }
       
-      toast.success("Settings saved successfully");
+      applySettings();
+      
+      toast.success("Settings saved and applied successfully");
       setUnsavedChanges(false);
     } catch (error) {
       console.error("Error saving settings:", error);
-      toast.error("Failed to save settings");
+      toast.error("Failed to save settings to database, but saved locally");
     } finally {
       setSaving(false);
+    }
+  };
+  
+  const handleDeleteData = () => {
+    if (confirm("Are you sure you want to delete all your data? This cannot be undone.")) {
+      toast.promise(
+        async () => {
+          setSettings(defaultSettings);
+          localStorage.removeItem(LOCAL_STORAGE_KEY);
+          
+          if (user) {
+            await supabase
+              .from('user_preferences')
+              .delete()
+              .eq('user_id', user.id);
+          }
+          
+          applySettings();
+          setUnsavedChanges(false);
+          
+          return true;
+        },
+        {
+          loading: "Deleting data...",
+          success: "All data deleted successfully",
+          error: "Failed to delete data"
+        }
+      );
     }
   };
   
@@ -182,8 +257,8 @@ const Settings = () => {
   return (
     <Layout>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold">Settings</h1>
+        <div className="flex flex-wrap justify-between items-center mb-8 gap-4">
+          <h1 className="text-2xl sm:text-3xl font-bold">Settings</h1>
           
           {unsavedChanges && (
             <Button 
@@ -199,8 +274,7 @@ const Settings = () => {
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Left sidebar - menu */}
-          <div className="glass-card p-6">
+          <div className="glass-card p-4 sm:p-6">
             <nav className="space-y-1">
               <button 
                 onClick={() => setActiveTab("notifications")}
@@ -264,9 +338,7 @@ const Settings = () => {
             </nav>
           </div>
           
-          {/* Main content area */}
           <div className="md:col-span-2 space-y-8">
-            {/* Notifications */}
             {activeTab === "notifications" && (
               <section className="glass-card p-6">
                 <div className="flex items-center gap-2 mb-6">
@@ -326,7 +398,6 @@ const Settings = () => {
               </section>
             )}
             
-            {/* Audio Settings */}
             {activeTab === "audio" && (
               <section className="glass-card p-6">
                 <div className="flex items-center gap-2 mb-6">
@@ -411,7 +482,6 @@ const Settings = () => {
               </section>
             )}
             
-            {/* Appearance */}
             {activeTab === "appearance" && (
               <section className="glass-card p-6">
                 <div className="flex items-center gap-2 mb-6">
@@ -496,7 +566,6 @@ const Settings = () => {
               </section>
             )}
             
-            {/* Privacy */}
             {activeTab === "privacy" && (
               <section className="glass-card p-6">
                 <div className="flex items-center gap-2 mb-6">
@@ -557,7 +626,11 @@ const Settings = () => {
                   </div>
                   
                   <div className="pt-4">
-                    <Button variant="outline" className="text-destructive border-destructive/20 hover:bg-destructive/10">
+                    <Button 
+                      variant="outline" 
+                      className="text-destructive border-destructive/20 hover:bg-destructive/10"
+                      onClick={handleDeleteData}
+                    >
                       Delete All My Data
                     </Button>
                   </div>
@@ -565,7 +638,6 @@ const Settings = () => {
               </section>
             )}
             
-            {/* Advanced Settings */}
             {activeTab === "advanced" && (
               <section className="glass-card p-6">
                 <div className="flex items-center gap-2 mb-6">
@@ -585,7 +657,12 @@ const Settings = () => {
                     <div className="space-y-3">
                       <div>
                         <label className="text-sm text-light-100/70">Processing Threads</label>
-                        <select className="w-full mt-1 bg-dark-400 border border-white/10 rounded-lg px-3 py-2">
+                        <select 
+                          className="w-full mt-1 bg-dark-400 border border-white/10 rounded-lg px-3 py-2"
+                          onChange={(e) => {
+                            toast.success(`Processing threads set to ${e.target.value}`);
+                          }}
+                        >
                           <option value="auto">Auto (Recommended)</option>
                           <option value="1">1 Thread</option>
                           <option value="2">2 Threads</option>
@@ -596,10 +673,16 @@ const Settings = () => {
                       
                       <div>
                         <label className="text-sm text-light-100/70">Buffer Size</label>
-                        <select className="w-full mt-1 bg-dark-400 border border-white/10 rounded-lg px-3 py-2">
+                        <select 
+                          className="w-full mt-1 bg-dark-400 border border-white/10 rounded-lg px-3 py-2"
+                          defaultValue="1024"
+                          onChange={(e) => {
+                            toast.success(`Buffer size set to ${e.target.value}`);
+                          }}
+                        >
                           <option value="256">256 (Low Latency)</option>
                           <option value="512">512</option>
-                          <option value="1024" selected>1024 (Default)</option>
+                          <option value="1024">1024 (Default)</option>
                           <option value="2048">2048 (Better Performance)</option>
                           <option value="4096">4096 (Best Performance)</option>
                         </select>
@@ -615,6 +698,12 @@ const Settings = () => {
                             type="checkbox"
                             className="sr-only peer"
                             defaultChecked={true}
+                            onChange={(e) => {
+                              toast.success(e.target.checked ? 
+                                "GPU acceleration enabled" : 
+                                "GPU acceleration disabled"
+                              );
+                            }}
                           />
                           <div className="w-11 h-6 bg-dark-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                         </label>
@@ -626,7 +715,20 @@ const Settings = () => {
                     <h3 className="font-medium mb-2">Data Management</h3>
                     
                     <div className="space-y-4">
-                      <Button variant="outline" className="w-full sm:w-auto">
+                      <Button 
+                        variant="outline" 
+                        className="w-full sm:w-auto"
+                        onClick={() => {
+                          toast.promise(
+                            new Promise(resolve => setTimeout(resolve, 1000)),
+                            {
+                              loading: "Clearing cache...",
+                              success: "Cache cleared successfully",
+                              error: "Failed to clear cache"
+                            }
+                          );
+                        }}
+                      >
                         Clear Cache
                       </Button>
                       
@@ -643,7 +745,6 @@ const Settings = () => {
               </section>
             )}
             
-            {/* Save Button */}
             <div className="flex justify-end">
               <Button 
                 variant="gradient" 

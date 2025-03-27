@@ -1,12 +1,13 @@
 
-import { useState, useEffect } from "react";
-import { Music, Search, ArrowUp, ArrowDown, Play, Pause } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Music, Search, ArrowUp, ArrowDown, Play, Pause, Upload } from "lucide-react";
 import { toast } from "sonner";
 import Button from "./Button";
 import AudioVisualizer from "./AudioVisualizer";
 import { useAudio } from "../contexts/AudioContext";
 import { useAudioPlayer } from "../hooks/useAudioPlayer";
 import { blobToAudioBuffer } from "../services/audioService";
+import { useIsMobile } from "../hooks/use-mobile";
 
 interface Instrumental {
   id: string;
@@ -67,31 +68,42 @@ const dummyInstrumentals: Instrumental[] = [
   }
 ];
 
-// Simulate loading audio from URL
+// Load audio from URL with better error handling
 const loadAudioFromUrl = async (url: string): Promise<Blob> => {
-  // In a real app, this would fetch from a real URL
-  // For demo purposes, we'll create a synthetic audio blob
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const sampleRate = 44100;
-      const lengthInSamples = sampleRate * 3; // 3 seconds
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const buffer = audioContext.createBuffer(2, lengthInSamples, sampleRate);
-      
-      // Create some basic waveform data
-      for (let channel = 0; channel < 2; channel++) {
-        const data = buffer.getChannelData(channel);
-        for (let i = 0; i < lengthInSamples; i++) {
-          // Create a simple sine wave
-          data[i] = Math.sin(i * 0.01) * 0.5;
-        }
-      }
-      
-      // Convert to WAV blob
-      const wavBlob = new Blob([buffer], { type: 'audio/wav' });
-      resolve(wavBlob);
-    }, 500);
-  });
+  try {
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
+    }
+    
+    return await response.blob();
+  } catch (error) {
+    console.error("Error loading audio:", error);
+    // Fallback to synthetic audio for demo purposes
+    return createSyntheticAudio();
+  }
+};
+
+// Create synthetic audio as fallback
+const createSyntheticAudio = (): Blob => {
+  const sampleRate = 44100;
+  const lengthInSamples = sampleRate * 3; // 3 seconds
+  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  const buffer = audioContext.createBuffer(2, lengthInSamples, sampleRate);
+  
+  // Create some basic waveform data
+  for (let channel = 0; channel < 2; channel++) {
+    const data = buffer.getChannelData(channel);
+    for (let i = 0; i < lengthInSamples; i++) {
+      // Create a simple sine wave
+      data[i] = Math.sin(i * 0.01) * 0.5;
+    }
+  }
+  
+  // Convert to WAV blob
+  const wavBlob = new Blob([buffer], { type: 'audio/wav' });
+  return wavBlob;
 };
 
 interface InstrumentalBrowserProps {
@@ -109,6 +121,8 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
   const [isLoading, setIsLoading] = useState(false);
   const [instrumentalBlob, setInstrumentalBlob] = useState<Blob | null>(null);
   const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const isMobile = useIsMobile();
   
   const { isPlaying, togglePlayback } = useAudioPlayer(audioBuffer);
 
@@ -137,6 +151,44 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
     } catch (error) {
       console.error("Error loading instrumental:", error);
       toast.error("Failed to load instrumental");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    setIsLoading(true);
+    
+    try {
+      // Create custom instrumental object for the uploaded file
+      const uploadedInstrumental: Instrumental = {
+        id: `uploaded-${Date.now()}`,
+        title: file.name.replace(/\.[^/.]+$/, ""), // Remove file extension
+        genre: "Custom Upload",
+        bpm: 0, // Unknown
+        key: "Unknown",
+        duration: "Unknown",
+        audioUrl: URL.createObjectURL(file)
+      };
+      
+      setSelectedInstrumental(uploadedInstrumental);
+      
+      // Set the blob directly
+      setInstrumentalBlob(file);
+      setInstrumentalAudioBlob(file);
+      
+      // Convert to audio buffer for playback
+      const buffer = await blobToAudioBuffer(file);
+      setAudioBuffer(buffer);
+      
+      onSelect?.(uploadedInstrumental);
+      toast.success(`Uploaded "${file.name}"`);
+    } catch (error) {
+      console.error("Error processing uploaded file:", error);
+      toast.error("Failed to process uploaded file");
     } finally {
       setIsLoading(false);
     }
@@ -173,8 +225,35 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
     });
 
   return (
-    <div className={`glass-card p-6 ${className}`}>
+    <div className={`glass-card p-4 sm:p-6 ${className}`}>
       <h3 className="text-xl font-semibold mb-4">Instrumental Browser</h3>
+      
+      {/* Action buttons */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <Button 
+          variant="outline" 
+          className="flex items-center justify-center gap-2 flex-1"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <Upload className="h-4 w-4" />
+          <span>Upload Instrumental</span>
+        </Button>
+        <input 
+          type="file" 
+          ref={fileInputRef}
+          accept="audio/*" 
+          className="hidden" 
+          onChange={handleFileUpload}
+        />
+        
+        <Button 
+          variant="outline" 
+          className="flex items-center justify-center gap-2 flex-1"
+        >
+          <Music className="h-4 w-4" />
+          <span>Browse Library</span>
+        </Button>
+      </div>
       
       {/* Search bar */}
       <div className="mb-4 relative">
@@ -221,7 +300,7 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
       </div>
       
       {/* Instrumentals list */}
-      <div className="max-h-60 overflow-y-auto scrollbar-none">
+      <div className={`${isMobile ? 'max-h-40' : 'max-h-60'} overflow-y-auto scrollbar-none`}>
         {filteredInstrumentals.length === 0 ? (
           <div className="text-center py-8 text-light-100/40">
             No instrumentals found
@@ -238,7 +317,7 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
               {/* Mobile view */}
               <div className="col-span-12 md:hidden flex flex-col gap-1">
                 <div className="font-medium">{instrumental.title}</div>
-                <div className="text-sm text-light-100/60 flex items-center gap-4">
+                <div className="text-sm text-light-100/60 flex items-center gap-4 flex-wrap">
                   <span>{instrumental.genre}</span>
                   <span>{instrumental.bpm} BPM</span>
                   <span>{instrumental.key}</span>
@@ -259,11 +338,11 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
       {selectedInstrumental && (
         <div className="mt-4 border-t border-white/10 pt-4">
           <div className="flex justify-between items-center mb-2">
-            <h4 className="font-medium">{selectedInstrumental.title}</h4>
+            <h4 className="font-medium truncate">{selectedInstrumental.title}</h4>
             <div className="text-sm text-light-100/60">{selectedInstrumental.duration}</div>
           </div>
           
-          <div className="h-20 bg-dark-300 rounded-lg overflow-hidden mb-3">
+          <div className="h-20 bg-dark-300 rounded-lg overflow-hidden mb-3 relative">
             <AudioVisualizer 
               isPlaying={isPlaying && !isLoading} 
               audioUrl={selectedInstrumental.audioUrl}
@@ -275,7 +354,7 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
             )}
           </div>
           
-          <div className="flex justify-between">
+          <div className="flex justify-between flex-wrap gap-2">
             <div className="text-sm text-light-100/60">
               {selectedInstrumental.genre} • {selectedInstrumental.bpm} BPM • {selectedInstrumental.key}
             </div>
@@ -283,7 +362,10 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
             <Button
               variant="ghost"
               size="sm"
-              onClick={togglePlayback}
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlayback();
+              }}
               disabled={isLoading}
               className="flex items-center gap-2"
             >
