@@ -9,14 +9,23 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY') || '';
+    const stripeLiveKey = Deno.env.get('STRIPE_LIVE_KEY') || '';
     const stripeWebhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') || '';
+    const stripeLiveWebhookSecret = Deno.env.get('STRIPE_LIVE_WEBHOOK_SECRET') || '';
     
-    if (!stripeKey) {
-      throw new Error('STRIPE_SECRET_KEY is not set');
+    // Determine which key to use based on the signature
+    const signature = req.headers.get('stripe-signature');
+    const liveMode = req.headers.get('stripe-mode') === 'live';
+    
+    const keyToUse = liveMode && stripeLiveKey ? stripeLiveKey : stripeKey;
+    const webhookSecretToUse = liveMode && stripeLiveWebhookSecret ? stripeLiveWebhookSecret : stripeWebhookSecret;
+    
+    if (!keyToUse) {
+      throw new Error('Stripe key is not set');
     }
     
     // Initialize Stripe
-    const stripe = new Stripe(stripeKey, {
+    const stripe = new Stripe(keyToUse, {
       apiVersion: '2023-10-16',
     });
     
@@ -24,7 +33,6 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
     
     // Get the signature from the headers
-    const signature = req.headers.get('stripe-signature');
     if (!signature) {
       return new Response(JSON.stringify({ error: 'No signature' }), { status: 400 });
     }
@@ -36,13 +44,14 @@ serve(async (req) => {
     let event;
     
     try {
-      if (stripeWebhookSecret) {
-        event = stripe.webhooks.constructEvent(body, signature, stripeWebhookSecret);
+      if (webhookSecretToUse) {
+        event = stripe.webhooks.constructEvent(body, signature, webhookSecretToUse);
       } else {
         // For development, just parse the body
         event = JSON.parse(body);
       }
     } catch (err) {
+      console.error('Webhook signature verification failed:', err.message);
       return new Response(JSON.stringify({ error: `Webhook Error: ${err.message}` }), { status: 400 });
     }
     
@@ -55,15 +64,22 @@ serve(async (req) => {
         const { userId, planId } = session.metadata;
         
         if (userId && planId) {
+          console.log(`Processing checkout completion for user ${userId} with plan ${planId}`);
+          
           // Check if user already has a subscription
-          const { data: existingSubscription } = await supabase
+          const { data: existingSubscription, error: subError } = await supabase
             .from('user_subscriptions')
             .select('id')
             .eq('user_id', userId)
-            .single();
+            .maybeSingle();
+          
+          if (subError) {
+            console.error('Error checking for existing subscription:', subError);
+          }
             
           if (existingSubscription) {
             // Update existing subscription
+            console.log(`Updating existing subscription ${existingSubscription.id}`);
             await supabase
               .from('user_subscriptions')
               .update({
@@ -71,11 +87,13 @@ serve(async (req) => {
                 status: 'active',
                 stripe_subscription_id: session.subscription,
                 current_period_start: new Date().toISOString(),
+                current_period_end: null, // Will be updated when we get the invoice.paid event
                 updated_at: new Date().toISOString()
               })
               .eq('id', existingSubscription.id);
           } else {
             // Create new subscription
+            console.log(`Creating new subscription for user ${userId}`);
             await supabase
               .from('user_subscriptions')
               .insert({
@@ -83,9 +101,15 @@ serve(async (req) => {
                 plan_id: Number(planId),
                 status: 'active',
                 stripe_subscription_id: session.subscription,
-                current_period_start: new Date().toISOString()
+                current_period_start: new Date().toISOString(),
+                current_period_end: null // Will be updated when we get the invoice.paid event
               });
           }
+          
+          // Log successful subscription update
+          console.log('Subscription updated successfully');
+        } else {
+          console.error('Missing userId or planId in session metadata');
         }
         break;
       }
@@ -95,21 +119,31 @@ serve(async (req) => {
         const subscription = invoice.subscription;
         
         if (subscription) {
-          // Get the subscription
-          const subscriptionObject = await stripe.subscriptions.retrieve(subscription);
-          const { userId } = subscriptionObject.metadata;
+          console.log(`Processing paid invoice for subscription ${subscription}`);
           
-          if (userId) {
-            // Update the subscription period
-            await supabase
-              .from('user_subscriptions')
-              .update({
-                status: 'active',
-                current_period_start: new Date(invoice.period_start * 1000).toISOString(),
-                current_period_end: new Date(invoice.period_end * 1000).toISOString(),
-                updated_at: new Date().toISOString()
-              })
-              .eq('stripe_subscription_id', subscription);
+          try {
+            // Get the subscription
+            const subscriptionObject = await stripe.subscriptions.retrieve(subscription);
+            const { userId } = subscriptionObject.metadata;
+            
+            if (userId) {
+              // Update the subscription period
+              const result = await supabase
+                .from('user_subscriptions')
+                .update({
+                  status: 'active',
+                  current_period_start: new Date(invoice.period_start * 1000).toISOString(),
+                  current_period_end: new Date(invoice.period_end * 1000).toISOString(),
+                  updated_at: new Date().toISOString()
+                })
+                .eq('stripe_subscription_id', subscription);
+                
+              console.log(`Updated subscription period, result:`, result);
+            } else {
+              console.error('No userId found in subscription metadata');
+            }
+          } catch (error) {
+            console.error('Error retrieving subscription details:', error);
           }
         }
         break;
@@ -118,15 +152,23 @@ serve(async (req) => {
       case 'customer.subscription.deleted': {
         const subscription = event.data.object;
         
-        // Downgrade the user to free plan
-        await supabase
-          .from('user_subscriptions')
-          .update({
-            plan_id: 1, // Free plan
-            status: 'inactive',
-            updated_at: new Date().toISOString()
-          })
-          .eq('stripe_subscription_id', subscription.id);
+        console.log(`Processing subscription deletion: ${subscription.id}`);
+        
+        try {
+          // Downgrade the user to free plan
+          const result = await supabase
+            .from('user_subscriptions')
+            .update({
+              plan_id: 1, // Free plan
+              status: 'inactive',
+              updated_at: new Date().toISOString()
+            })
+            .eq('stripe_subscription_id', subscription.id);
+            
+          console.log(`Downgraded subscription, result:`, result);
+        } catch (error) {
+          console.error('Error downgrading subscription:', error);
+        }
           
         break;
       }

@@ -14,7 +14,8 @@ export const initiateStripeCheckout = async (planId: number, userId: string): Pr
       body: {
         planId,
         userId,
-        returnUrl: window.location.origin + '/subscription'
+        returnUrl: window.location.origin + '/subscription',
+        mode: 'live' // Set to 'live' mode instead of test mode
       }
     });
     

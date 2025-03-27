@@ -19,7 +19,7 @@ interface Plan {
 }
 
 const Subscription = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const success = searchParams.get('success');
   const canceled = searchParams.get('canceled');
   
@@ -27,6 +27,24 @@ const Subscription = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [processingCheckout, setProcessingCheckout] = useState(false);
+  
+  // Handle URL parameters only once on mount
+  useEffect(() => {
+    if (success && user) {
+      toast.success("Subscription updated successfully!");
+      refreshSubscription();
+      
+      // Clear URL parameters to prevent duplicate notifications
+      setSearchParams({});
+    }
+    
+    if (canceled) {
+      toast.error("Subscription process was canceled.");
+      
+      // Clear URL parameters to prevent duplicate notifications
+      setSearchParams({});
+    }
+  }, []);
   
   useEffect(() => {
     const fetchPlans = async () => {
@@ -83,17 +101,7 @@ const Subscription = () => {
     };
     
     fetchPlans();
-    
-    // Refresh subscription if returning from payment
-    if (success && user) {
-      toast.success("Subscription updated successfully!");
-      refreshSubscription();
-    }
-    
-    if (canceled) {
-      toast.error("Subscription process was canceled.");
-    }
-  }, [success, canceled, user, refreshSubscription]);
+  }, []);
   
   const handleSubscribe = async (planId: number) => {
     if (!user) {

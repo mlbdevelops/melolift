@@ -20,25 +20,30 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY') || '';
+    const stripeLiveKey = Deno.env.get('STRIPE_LIVE_KEY') || '';
     
-    if (!stripeKey) {
-      console.error('STRIPE_SECRET_KEY is not set');
-      throw new Error('STRIPE_SECRET_KEY is not set');
+    if (!stripeKey && !stripeLiveKey) {
+      console.error('Neither STRIPE_SECRET_KEY nor STRIPE_LIVE_KEY is set');
+      throw new Error('Stripe keys are not set');
     }
     
-    // Initialize Stripe
-    const stripe = new Stripe(stripeKey, {
+    // Get request data
+    const requestData = await req.json();
+    const { planId, userId, returnUrl, mode = 'test' } = requestData;
+    
+    console.log("Request data:", { planId, userId, returnUrl, mode });
+    
+    // Use live key if mode is set to 'live', otherwise use test key
+    const keyToUse = mode === 'live' && stripeLiveKey ? stripeLiveKey : stripeKey;
+    console.log(`Using ${mode} mode for Stripe.`);
+    
+    // Initialize Stripe with the appropriate key
+    const stripe = new Stripe(keyToUse, {
       apiVersion: '2023-10-16',
     });
     
     // Create Supabase admin client
     const supabase = createClient(supabaseUrl, supabaseKey);
-    
-    // Get request data
-    const requestData = await req.json();
-    const { planId, userId, returnUrl } = requestData;
-    
-    console.log("Request data:", { planId, userId, returnUrl });
     
     if (!planId || !userId || !returnUrl) {
       throw new Error('Missing required fields');
@@ -77,10 +82,14 @@ serve(async (req) => {
       throw new Error('Auth user not found');
     }
     
-    // Use Stripe Price ID if available, otherwise create a dynamic price
-    let priceId = plan.stripe_price_id;
+    // Get Stripe Price ID based on mode
+    let priceId;
     
-    if (!priceId) {
+    if (mode === 'live' && plan.stripe_live_price_id) {
+      priceId = plan.stripe_live_price_id;
+    } else if (plan.stripe_price_id) {
+      priceId = plan.stripe_price_id;
+    } else {
       try {
         // Create a product first
         const product = await stripe.products.create({
@@ -105,9 +114,10 @@ serve(async (req) => {
         priceId = price.id;
         
         // Save the price ID for future use
+        const priceColumn = mode === 'live' ? 'stripe_live_price_id' : 'stripe_price_id';
         await supabase
           .from('subscription_plans')
-          .update({ stripe_price_id: priceId })
+          .update({ [priceColumn]: priceId })
           .eq('id', planId);
       } catch (error) {
         console.error("Error creating Stripe product/price:", error);
