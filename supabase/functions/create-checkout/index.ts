@@ -34,7 +34,10 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
     
     // Get request data
-    const { planId, userId, returnUrl } = await req.json();
+    const requestData = await req.json();
+    const { planId, userId, returnUrl } = requestData;
+    
+    console.log("Request data:", { planId, userId, returnUrl });
     
     if (!planId || !userId || !returnUrl) {
       throw new Error('Missing required fields');
@@ -48,6 +51,7 @@ serve(async (req) => {
       .single();
       
     if (planError || !plan) {
+      console.error("Plan error:", planError);
       throw new Error('Plan not found');
     }
     
@@ -59,6 +63,7 @@ serve(async (req) => {
       .single();
       
     if (userError) {
+      console.error("User error:", userError);
       throw new Error('User not found');
     }
     
@@ -67,6 +72,7 @@ serve(async (req) => {
       .auth.admin.getUserById(userId);
       
     if (authError || !authUser.user) {
+      console.error("Auth user error:", authError);
       throw new Error('Auth user not found');
     }
     
@@ -74,64 +80,78 @@ serve(async (req) => {
     let priceId = plan.stripe_price_id;
     
     if (!priceId) {
-      // Create a product first
-      const product = await stripe.products.create({
-        name: `${plan.name} Plan`,
-        active: true,
-      });
-      
-      // Then create a price for the product
-      const price = await stripe.prices.create({
-        unit_amount: Math.round(plan.price * 100), // Convert to cents
-        currency: 'usd',
-        product: product.id,
-        recurring: {
-          interval: 'month',
-        },
-      });
-      
-      priceId = price.id;
-      
-      // Save the price ID for future use
-      await supabase
-        .from('subscription_plans')
-        .update({ stripe_price_id: priceId })
-        .eq('id', planId);
+      try {
+        // Create a product first
+        const product = await stripe.products.create({
+          name: `${plan.name} Plan`,
+          active: true,
+        });
+        
+        console.log("Created product:", product.id);
+        
+        // Then create a price for the product
+        const price = await stripe.prices.create({
+          unit_amount: Math.round(plan.price * 100), // Convert to cents
+          currency: 'usd',
+          product: product.id,
+          recurring: {
+            interval: 'month',
+          },
+        });
+        
+        console.log("Created price:", price.id);
+        
+        priceId = price.id;
+        
+        // Save the price ID for future use
+        await supabase
+          .from('subscription_plans')
+          .update({ stripe_price_id: priceId })
+          .eq('id', planId);
+      } catch (error) {
+        console.error("Error creating Stripe product/price:", error);
+        throw new Error(`Failed to create Stripe product/price: ${error.message}`);
+      }
     }
     
     console.log('Creating checkout session with price ID:', priceId);
     
-    // Create checkout session
-    const session = await stripe.checkout.sessions.create({
-      customer_email: authUser.user.email,
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
+    try {
+      // Create checkout session
+      const session = await stripe.checkout.sessions.create({
+        customer_email: authUser.user.email,
+        line_items: [
+          {
+            price: priceId,
+            quantity: 1,
+          },
+        ],
+        mode: 'subscription',
+        success_url: `${returnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${returnUrl}?canceled=true`,
+        metadata: {
+          userId,
+          planId: planId.toString(),
         },
-      ],
-      mode: 'subscription',
-      success_url: `${returnUrl}?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${returnUrl}?canceled=true`,
-      metadata: {
-        userId,
-        planId: planId.toString(),
-      },
-    });
-    
-    console.log('Checkout session created:', session.id);
-    
-    // Return the session URL
-    return new Response(
-      JSON.stringify({ url: session.url }),
-      { 
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
-        },
-        status: 200 
-      }
-    );
+      });
+      
+      console.log('Checkout session created:', session.id);
+      
+      // Return the session URL
+      return new Response(
+        JSON.stringify({ url: session.url }),
+        { 
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+          },
+          status: 200 
+        }
+      );
+    } catch (error) {
+      console.error("Error creating checkout session:", error);
+      throw new Error(`Failed to create checkout session: ${error.message}`);
+    }
   } catch (error) {
     console.error('Error:', error.message);
     
