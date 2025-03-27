@@ -33,8 +33,8 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             "h-10 w-10 rounded-md": size === "icon",
           },
           
-          // Fix horizontal alignment of icon and text
-          "[&>svg]:inline-block [&>svg]:align-middle",
+          // Ensure proper icon alignment
+          "flex items-center justify-center gap-1",
           
           className
         )}

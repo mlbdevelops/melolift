@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from "react";
 import { Music, Search, ArrowUp, ArrowDown, Play, Pause, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -70,7 +71,12 @@ const dummyInstrumentals: Instrumental[] = [
 // Load audio from URL with better error handling
 const loadAudioFromUrl = async (url: string): Promise<Blob> => {
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      mode: 'cors',
+      headers: {
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
     
     if (!response.ok) {
       throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
@@ -79,6 +85,7 @@ const loadAudioFromUrl = async (url: string): Promise<Blob> => {
     return await response.blob();
   } catch (error) {
     console.error("Error loading audio:", error);
+    toast.error("Failed to load instrumental. Trying fallback audio.");
     // Fallback to synthetic audio for demo purposes
     return createSyntheticAudio();
   }
@@ -380,7 +387,7 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
               disabled={isLoading}
               className="flex items-center gap-2"
             >
-              {isPlaying ? <Pause className="h-4 w-4 mr-1" /> : <Play className="h-4 w-4 mr-1" />}
+              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
               {isPlaying ? "Pause" : "Play"}
             </Button>
           </div>

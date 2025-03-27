@@ -29,7 +29,7 @@ serve(async (req) => {
     
     // Get request data
     const requestData = await req.json();
-    const { planId, userId, returnUrl, mode = 'test' } = requestData;
+    const { planId, userId, returnUrl, mode = 'live' } = requestData; // Default to live mode
     
     console.log("Request data:", { planId, userId, returnUrl, mode });
     

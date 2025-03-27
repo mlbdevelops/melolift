@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Music, Mic, Sliders, Sparkles, Play, Pause } from "lucide-react";
@@ -130,17 +131,18 @@ const LandingPage = () => {
           <div className="relative">
             <div className="glass-morphism rounded-2xl p-6 relative z-10">
               <div className="bg-dark-300 rounded-xl h-64 md:h-80 overflow-hidden relative">
-                {/* Waveform visualization */}
+                {/* Waveform visualization - fixed animation */}
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="waveform-container">
+                  <div className="flex items-center justify-center w-full h-full">
                     {Array.from({ length: 40 }).map((_, i) => (
                       <div 
                         key={i}
-                        className="waveform-line"
+                        className="waveform-line mx-[1px]"
                         style={{ 
                           height: `${Math.sin(i * 0.2) * 50 + 50}%`,
                           opacity: isPlaying ? 1 : 0.5,
-                          animation: isPlaying ? `wave 1.5s ease-in-out infinite ${i * 0.05}s` : 'none'
+                          animationDelay: `${i * 0.05}s`,
+                          animationPlayState: isPlaying ? 'running' : 'paused'
                         }}
                       />
                     ))}

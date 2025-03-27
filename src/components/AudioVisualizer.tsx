@@ -12,27 +12,28 @@ const AudioVisualizer = ({ audioUrl, isPlaying = false, className = "" }: AudioV
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const sourceNodeRef = useRef<MediaElementSourceNode | null>(null);
+  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
   const animationRef = useRef<number>(0);
   const [isSourceConnected, setIsSourceConnected] = useState(false);
 
   // Create or reset audio context when component mounts or audioUrl changes
   useEffect(() => {
     // Reset audio element if URL changes
-    if (audioRef.current && audioUrl) {
-      // Disconnect previous source if it exists
+    if (audioUrl) {
+      // Disconnect previous source and clean up
       if (sourceNodeRef.current) {
         sourceNodeRef.current.disconnect();
         sourceNodeRef.current = null;
         setIsSourceConnected(false);
       }
-    
+      
       // Create new audio element to avoid connection issues
       audioRef.current = new Audio(audioUrl);
       audioRef.current.crossOrigin = "anonymous";
-    } else if (!audioRef.current && audioUrl) {
-      audioRef.current = new Audio(audioUrl);
-      audioRef.current.crossOrigin = "anonymous";
+      audioRef.current.addEventListener('error', (e) => {
+        console.error("Audio loading error:", e);
+        // We'll show an error toast in the InstrumentalBrowser component
+      });
     }
 
     // Clean up on unmount or URL change
@@ -44,6 +45,13 @@ const AudioVisualizer = ({ audioUrl, isPlaying = false, className = "" }: AudioV
         sourceNodeRef.current.disconnect();
         sourceNodeRef.current = null;
         setIsSourceConnected(false);
+      }
+
+      // Clean up audio element
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
+        audioRef.current.load();
       }
     };
   }, [audioUrl]);
@@ -64,6 +72,7 @@ const AudioVisualizer = ({ audioUrl, isPlaying = false, className = "" }: AudioV
       // On unmount, clean everything up
       if (sourceNodeRef.current) {
         sourceNodeRef.current.disconnect();
+        sourceNodeRef.current = null;
       }
       
       if (analyserRef.current) {
@@ -72,7 +81,6 @@ const AudioVisualizer = ({ audioUrl, isPlaying = false, className = "" }: AudioV
       
       if (audioContextRef.current) {
         // We don't close the context to avoid issues with reuse
-        // audioContextRef.current.close();
       }
     };
   }, []);
@@ -89,6 +97,11 @@ const AudioVisualizer = ({ audioUrl, isPlaying = false, className = "" }: AudioV
         audioUrl
       ) {
         try {
+          // Resume audio context if suspended (needed for mobile)
+          if (audioContextRef.current.state === 'suspended') {
+            audioContextRef.current.resume();
+          }
+          
           // Create and connect source
           sourceNodeRef.current = audioContextRef.current.createMediaElementSource(audioRef.current);
           sourceNodeRef.current.connect(analyserRef.current);
