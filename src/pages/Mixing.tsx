@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Activity, Play, Pause, Save, Download, Upload, Trash2, Settings as SettingsIcon } from "lucide-react";
@@ -307,7 +306,7 @@ const Mixing = () => {
             
             <InstrumentalBrowser />
             
-            {/* Add a download section */}
+            {/* Export section with updated format options based on plan */}
             <div className="glass-card p-6">
               <h3 className="text-xl font-semibold mb-4">Export Your Mix</h3>
               
@@ -323,9 +322,48 @@ const Mixing = () => {
                   isLoading={exporting}
                 >
                   <Download className="h-4 w-4 mr-2" />
-                  Export as MP3
+                  Export as MP3 (Low Quality)
                 </Button>
                 
+                {/* Medium quality MP3 - Pro plan feature */}
+                <div className="relative">
+                  <Button 
+                    variant="outline" 
+                    className="w-full flex items-center justify-center opacity-60"
+                    disabled={!isPremiumFeature('mp3-export')}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Export as MP3 (High Quality)
+                  </Button>
+                  
+                  {!isPremiumFeature('mp3-export') && (
+                    <div 
+                      className="absolute inset-0 flex items-center justify-end pr-3 cursor-pointer"
+                      onClick={() => {
+                        toast.info(
+                          <div>
+                            <p className="font-bold mb-2">Pro Feature</p>
+                            <p>Upgrade to export in high-quality MP3 format.</p>
+                            <Button 
+                              variant="gradient" 
+                              size="sm" 
+                              className="mt-2"
+                              onClick={() => window.location.href = '/subscription'}
+                            >
+                              Upgrade Now
+                            </Button>
+                          </div>
+                        );
+                      }}
+                    >
+                      <div className="bg-primary text-white text-xs px-2 py-1 rounded-full">
+                        PRO
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* WAV export - Premium plan feature */}
                 <div className="relative">
                   <Button 
                     variant="outline" 
@@ -344,6 +382,44 @@ const Mixing = () => {
                           <div>
                             <p className="font-bold mb-2">Premium Feature</p>
                             <p>Upgrade to export in high-quality WAV format.</p>
+                            <Button 
+                              variant="gradient" 
+                              size="sm" 
+                              className="mt-2"
+                              onClick={() => window.location.href = '/subscription'}
+                            >
+                              Upgrade Now
+                            </Button>
+                          </div>
+                        );
+                      }}
+                    >
+                      <div className="bg-accent-purple text-white text-xs px-2 py-1 rounded-full">
+                        PREMIUM
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* FLAC export - Premium plan feature */}
+                <div className="relative">
+                  <Button 
+                    variant="outline" 
+                    className="w-full flex items-center justify-center opacity-60"
+                    disabled={!isPremiumFeature('flac-export')}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Export as FLAC
+                  </Button>
+                  
+                  {!isPremiumFeature('flac-export') && (
+                    <div 
+                      className="absolute inset-0 flex items-center justify-end pr-3 cursor-pointer"
+                      onClick={() => {
+                        toast.info(
+                          <div>
+                            <p className="font-bold mb-2">Premium Feature</p>
+                            <p>Upgrade to export in lossless FLAC format.</p>
                             <Button 
                               variant="gradient" 
                               size="sm" 

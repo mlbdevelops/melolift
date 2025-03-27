@@ -1,265 +1,261 @@
-
-import { useState, useEffect } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
-import { Mail, Lock, User, ArrowRight, Google, Apple } from "lucide-react";
-import { toast } from "sonner";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Eye, EyeOff, Mail, Lock, Apple } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
-import Layout from "../components/Layout";
-import Button from "../components/Button";
+import Logo from "../components/Logo";
+import { Google } from "lucide-react";
 
 const Auth = () => {
-  const [searchParams] = useSearchParams();
-  const isSignUp = searchParams.get("signup") === "true";
-  const navigate = useNavigate();
-  const { user } = useAuth();
-  
+  const [type, setType] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
   
-  useEffect(() => {
-    // If user is already logged in, redirect to dashboard
-    if (user) {
-      navigate("/dashboard");
-    }
-  }, [user, navigate]);
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
+  };
   
-  const handleAuth = async (e: React.FormEvent) => {
+  const toggleConfirmPasswordVisibility = () => {
+    setShowConfirmPassword(!showConfirmPassword);
+  };
+  
+  const handleAuthAction = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    
+    if (type === "signup" && password !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    
+    setLoading(true);
     
     try {
-      if (isSignUp) {
-        // Sign up flow
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: fullName,
-            }
-          }
-        });
-        
-        if (error) throw error;
-        
-        // Create profile
-        const { data: { user: newUser } } = await supabase.auth.getUser();
-        
-        if (newUser) {
-          await supabase.from('profiles').insert({
-            id: newUser.id,
-            full_name: fullName,
-            avatar_url: null,
-          });
-        }
-        
-        toast.success("Account created successfully! Please check your email for verification.");
-      } else {
-        // Sign in flow
+      if (type === "login") {
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-        
         if (error) throw error;
-        
-        toast.success("Signed in successfully!");
-        navigate("/dashboard");
+        toast.success("Logged in successfully");
+      } else {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+        if (error) throw error;
+        toast.success("Signed up successfully. Check your email to verify.");
       }
+      
+      // Redirect to dashboard after successful login/signup
+      navigate("/dashboard");
     } catch (error: any) {
-      console.error("Auth error:", error);
+      console.error("Authentication error:", error);
       toast.error(error.message || "Authentication failed");
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
   
-  const handleGoogleSignIn = async () => {
+  const handleOAuthSignIn = async (provider: "google" | "apple") => {
+    setLoading(true);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/dashboard`,
-        },
+        provider,
       });
-      
       if (error) throw error;
     } catch (error: any) {
-      console.error("Google sign in error:", error);
-      toast.error(error.message || "Failed to sign in with Google");
+      console.error(`OAuth sign-in with ${provider} error:`, error);
+      toast.error(error.message || `Failed to sign in with ${provider}`);
+    } finally {
+      setLoading(false);
     }
   };
   
-  const handleAppleSignIn = async () => {
+  const handleSignOut = async () => {
+    setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'apple',
-        options: {
-          redirectTo: `${window.location.origin}/dashboard`,
-        },
-      });
-      
-      if (error) throw error;
+      await signOut();
+      toast.success("Signed out successfully");
+      navigate("/");
     } catch (error: any) {
-      console.error("Apple sign in error:", error);
-      toast.error(error.message || "Failed to sign in with Apple");
+      console.error("Sign-out error:", error);
+      toast.error(error.message || "Failed to sign out");
+    } finally {
+      setLoading(false);
     }
   };
   
   return (
-    <Layout>
-      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <div className="glass-card max-w-md w-full p-8 rounded-xl">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent-purple bg-clip-text text-transparent">
-              MeloLift
-            </h1>
-            <h2 className="mt-4 text-2xl font-bold">
-              {isSignUp ? "Create your account" : "Welcome back"}
-            </h2>
-            <p className="mt-2 text-light-100/60">
-              {isSignUp 
-                ? "Sign up to start creating amazing music" 
-                : "Sign in to continue your music journey"}
-            </p>
+    <div className="min-h-screen bg-dark-200 text-light-100 flex items-center justify-center">
+      <div className="glass-card w-full max-w-md p-8 rounded-lg shadow-lg">
+        <div className="text-center mb-6">
+          <Logo />
+          <h2 className="text-2xl font-bold mt-4">
+            {type === "login" ? "Login" : "Sign Up"}
+          </h2>
+        </div>
+        
+        <form onSubmit={handleAuthAction} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-light-100">
+              Email
+            </label>
+            <div className="relative mt-1">
+              <input
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-2 rounded-md bg-dark-300 border border-dark-100 text-light-100 focus:ring-2 focus:ring-primary focus:border-primary"
+                required
+              />
+              <Mail className="absolute top-1/2 right-3 -translate-y-1/2 h-5 w-5 text-light-100/50" />
+            </div>
           </div>
           
-          <form onSubmit={handleAuth} className="space-y-6">
-            {isSignUp && (
-              <div>
-                <label htmlFor="fullName" className="block text-sm font-medium mb-1">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <User className="h-5 w-5 text-light-100/40" />
-                  </div>
-                  <input
-                    id="fullName"
-                    name="fullName"
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="w-full pl-10 pr-3 py-2 bg-dark-300 border border-white/10 rounded-lg focus:outline-none focus:border-primary"
-                    placeholder="John Doe"
-                  />
-                </div>
-              </div>
-            )}
-            
+          <div>
+            <label className="block text-sm font-medium text-light-100">
+              Password
+            </label>
+            <div className="relative mt-1">
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-2 rounded-md bg-dark-300 border border-dark-100 text-light-100 focus:ring-2 focus:ring-primary focus:border-primary"
+                required
+              />
+              <Lock className="absolute top-1/2 left-3 -translate-y-1/2 h-5 w-5 text-light-100/50" />
+              <button
+                type="button"
+                className="absolute top-1/2 right-3 -translate-y-1/2 focus:outline-none"
+                onClick={togglePasswordVisibility}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-5 w-5 text-light-100/50 cursor-pointer" />
+                ) : (
+                  <Eye className="h-5 w-5 text-light-100/50 cursor-pointer" />
+                )}
+              </button>
+            </div>
+          </div>
+          
+          {type === "signup" && (
             <div>
-              <label htmlFor="email" className="block text-sm font-medium mb-1">
-                Email
+              <label className="block text-sm font-medium text-light-100">
+                Confirm Password
               </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-light-100/40" />
-                </div>
+              <div className="relative mt-1">
                 <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
+                  type={showConfirmPassword ? "text" : "password"}
+                  placeholder="Confirm your password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-4 py-2 rounded-md bg-dark-300 border border-dark-100 text-light-100 focus:ring-2 focus:ring-primary focus:border-primary"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-3 py-2 bg-dark-300 border border-white/10 rounded-lg focus:outline-none focus:border-primary"
-                  placeholder="name@example.com"
                 />
+                <Lock className="absolute top-1/2 left-3 -translate-y-1/2 h-5 w-5 text-light-100/50" />
+                <button
+                  type="button"
+                  className="absolute top-1/2 right-3 -translate-y-1/2 focus:outline-none"
+                  onClick={toggleConfirmPasswordVisibility}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-5 w-5 text-light-100/50 cursor-pointer" />
+                  ) : (
+                    <Eye className="h-5 w-5 text-light-100/50 cursor-pointer" />
+                  )}
+                </button>
               </div>
             </div>
-            
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium mb-1">
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-light-100/40" />
-                </div>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete={isSignUp ? "new-password" : "current-password"}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-3 py-2 bg-dark-300 border border-white/10 rounded-lg focus:outline-none focus:border-primary"
-                  placeholder="••••••••"
-                  minLength={6}
-                />
-              </div>
-            </div>
-            
-            {!isSignUp && (
-              <div className="flex items-center justify-end">
-                <a href="#" className="text-sm text-primary hover:underline">
-                  Forgot password?
-                </a>
-              </div>
-            )}
-            
+          )}
+          
+          <div>
             <Button
               type="submit"
               variant="gradient"
-              className="w-full flex items-center justify-center"
-              isLoading={isSubmitting}
+              className="w-full"
+              isLoading={loading}
             >
-              {isSignUp ? "Create Account" : "Sign In"}
-              <ArrowRight className="ml-2 h-4 w-4" />
+              {type === "login" ? "Login" : "Sign Up"}
             </Button>
-            
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-white/10"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-dark-200 text-light-100/60">Or continue with</span>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                className="flex items-center justify-center"
-                onClick={handleGoogleSignIn}
-              >
-                <Google className="mr-2 h-4 w-4" />
-                Google
-              </Button>
-              
-              <Button
-                type="button"
-                variant="outline"
-                className="flex items-center justify-center"
-                onClick={handleAppleSignIn}
-              >
-                <Apple className="mr-2 h-4 w-4" />
-                Apple
-              </Button>
-            </div>
-          </form>
-          
-          <div className="mt-8 text-center">
-            <p>
-              {isSignUp ? "Already have an account? " : "Don't have an account? "}
-              <a
-                href={isSignUp ? "/auth" : "/auth?signup=true"}
-                className="text-primary hover:underline"
-              >
-                {isSignUp ? "Sign in" : "Sign up"}
-              </a>
-            </p>
           </div>
+        </form>
+        
+        <div className="mt-6 flex items-center justify-between">
+          <div className="border-t border-dark-100 w-5/12"></div>
+          <p className="text-light-100/70 text-center w-2/12">or</p>
+          <div className="border-t border-dark-100 w-5/12"></div>
+        </div>
+        
+        <div className="mt-6 space-y-3">
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => handleOAuthSignIn("google")}
+            disabled={loading}
+          >
+            <Google className="w-5 h-5 mr-2" />
+            Continue with Google
+          </Button>
+          
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => handleOAuthSignIn("apple")}
+            disabled={loading}
+          >
+            <Apple className="w-5 h-5 mr-2" />
+            Continue with Apple
+          </Button>
+        </div>
+        
+        <div className="mt-8 text-sm text-light-100/70 text-center">
+          {type === "login" ? (
+            <>
+              Don't have an account?{" "}
+              <button
+                type="button"
+                className="text-primary hover:underline"
+                onClick={() => setType("signup")}
+              >
+                Sign Up
+              </button>
+            </>
+          ) : (
+            <>
+              Already have an account?{" "}
+              <button
+                type="button"
+                className="text-primary hover:underline"
+                onClick={() => setType("login")}
+              >
+                Login
+              </button>
+            </>
+          )}
+        </div>
+        
+        <div className="mt-4 text-sm text-light-100/60 text-center">
+          <button
+            type="button"
+            className="text-red-500 hover:underline"
+            onClick={handleSignOut}
+            disabled={loading}
+          >
+            Sign Out
+          </button>
         </div>
       </div>
-    </Layout>
+    </div>
   );
 };
 
