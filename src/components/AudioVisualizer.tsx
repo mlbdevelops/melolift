@@ -1,5 +1,5 @@
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface AudioVisualizerProps {
   audioUrl?: string;
@@ -12,52 +12,113 @@ const AudioVisualizer = ({ audioUrl, isPlaying = false, className = "" }: AudioV
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceNodeRef = useRef<MediaElementSourceNode | null>(null);
   const animationRef = useRef<number>(0);
+  const [isSourceConnected, setIsSourceConnected] = useState(false);
 
+  // Create or reset audio context when component mounts or audioUrl changes
   useEffect(() => {
-    // Create audio element if it doesn't exist
-    if (!audioRef.current) {
-      audioRef.current = new Audio();
+    // Reset audio element if URL changes
+    if (audioRef.current && audioUrl) {
+      // Disconnect previous source if it exists
+      if (sourceNodeRef.current) {
+        sourceNodeRef.current.disconnect();
+        sourceNodeRef.current = null;
+        setIsSourceConnected(false);
+      }
+    
+      // Create new audio element to avoid connection issues
+      audioRef.current = new Audio(audioUrl);
+      audioRef.current.crossOrigin = "anonymous";
+    } else if (!audioRef.current && audioUrl) {
+      audioRef.current = new Audio(audioUrl);
+      audioRef.current.crossOrigin = "anonymous";
     }
 
-    // Set up audio context and analyser on mount
-    const setupAudio = () => {
-      if (!audioContextRef.current) {
-        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-        audioContextRef.current = new AudioContext();
-      }
-
-      if (!analyserRef.current) {
-        analyserRef.current = audioContextRef.current.createAnalyser();
-        analyserRef.current.fftSize = 256;
-      }
-
-      if (audioRef.current && audioUrl) {
-        audioRef.current.src = audioUrl;
-        audioRef.current.crossOrigin = "anonymous";
-        
-        const source = audioContextRef.current.createMediaElementSource(audioRef.current);
-        source.connect(analyserRef.current);
-        analyserRef.current.connect(audioContextRef.current.destination);
-      }
-    };
-
-    if (audioUrl) {
-      setupAudio();
-    }
-
+    // Clean up on unmount or URL change
     return () => {
       cancelAnimationFrame(animationRef.current);
-      if (audioContextRef.current) {
-        // audioContextRef.current.close();
+      
+      // Disconnect source if connected
+      if (sourceNodeRef.current) {
+        sourceNodeRef.current.disconnect();
+        sourceNodeRef.current = null;
+        setIsSourceConnected(false);
       }
     };
   }, [audioUrl]);
 
+  // Initialize audio context and analyzer
+  useEffect(() => {
+    if (!audioContextRef.current) {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      audioContextRef.current = new AudioContext();
+    }
+    
+    if (!analyserRef.current && audioContextRef.current) {
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      analyserRef.current.fftSize = 256;
+    }
+    
+    return () => {
+      // On unmount, clean everything up
+      if (sourceNodeRef.current) {
+        sourceNodeRef.current.disconnect();
+      }
+      
+      if (analyserRef.current) {
+        analyserRef.current.disconnect();
+      }
+      
+      if (audioContextRef.current) {
+        // We don't close the context to avoid issues with reuse
+        // audioContextRef.current.close();
+      }
+    };
+  }, []);
+
+  // Connect source when audio and context are ready
+  useEffect(() => {
+    const connectSource = () => {
+      // Only connect if we have audio, context, and analyzer but not connected yet
+      if (
+        audioRef.current && 
+        audioContextRef.current && 
+        analyserRef.current && 
+        !isSourceConnected &&
+        audioUrl
+      ) {
+        try {
+          // Create and connect source
+          sourceNodeRef.current = audioContextRef.current.createMediaElementSource(audioRef.current);
+          sourceNodeRef.current.connect(analyserRef.current);
+          analyserRef.current.connect(audioContextRef.current.destination);
+          setIsSourceConnected(true);
+        } catch (error) {
+          console.error("Error connecting audio source:", error);
+          // If connection fails, reset for retry
+          if (sourceNodeRef.current) {
+            sourceNodeRef.current.disconnect();
+            sourceNodeRef.current = null;
+          }
+          setIsSourceConnected(false);
+        }
+      }
+    };
+    
+    connectSource();
+  }, [audioUrl, isSourceConnected]);
+
+  // Handle play/pause
   useEffect(() => {
     if (!audioRef.current || !audioUrl) return;
 
     if (isPlaying) {
+      // Ensure source is connected before playing
+      if (audioContextRef.current?.state === 'suspended') {
+        audioContextRef.current.resume();
+      }
+      
       audioRef.current.play().catch(error => console.error("Audio play error:", error));
       drawVisualizer();
     } else {
@@ -112,11 +173,11 @@ const AudioVisualizer = ({ audioUrl, isPlaying = false, className = "" }: AudioV
   // If no audio, show default static "waveform"
   if (!audioUrl) {
     return (
-      <div className={`waveform-container ${className}`}>
+      <div className={`waveform-container flex justify-center items-center h-full ${className}`}>
         {Array.from({ length: 50 }).map((_, index) => (
           <div 
             key={index}
-            className="waveform-line animate-wave"
+            className="waveform-line mx-[1px] w-1 rounded-full animate-wave"
             style={{ 
               height: `${15 + Math.random() * 60}%`,
               animationDelay: `${Math.random() * 1000}ms`,
