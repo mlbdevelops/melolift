@@ -14,7 +14,7 @@ export const initiateStripeCheckout = async (planId: number, userId: string): Pr
     
     if (error) {
       console.error('Checkout error:', error);
-      throw new Error(error.message);
+      throw new Error(error.message || 'Failed to create checkout session');
     }
     
     return data.url;
