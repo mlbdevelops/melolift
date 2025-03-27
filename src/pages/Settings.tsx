@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Bell, Volume2, Moon, Sun, Globe, Shield, Sliders, Save } from "lucide-react";
 import { toast } from "sonner";
@@ -75,7 +76,7 @@ const Settings = () => {
             .from('user_preferences')
             .select('settings')
             .eq('user_id', user.id)
-            .single();
+            .maybeSingle();
             
           if (data && !error) {
             setSettings(data.settings as UserSettings || defaultSettings);

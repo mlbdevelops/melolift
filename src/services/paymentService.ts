@@ -24,13 +24,13 @@ export const initiateStripeCheckout = async (planId: number, userId: string): Pr
     if (error) {
       console.error('Checkout error:', error);
       toast.error(`Checkout error: ${error.message || 'Failed to create checkout session'}`);
-      throw new Error(error.message || 'Failed to create checkout session');
+      return null;
     }
     
     if (!data || !data.url) {
       console.error('Invalid response from checkout function:', data);
       toast.error('Invalid response from checkout function');
-      throw new Error('Invalid response from checkout function');
+      return null;
     }
     
     console.log('Checkout URL received:', data.url);
