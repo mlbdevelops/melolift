@@ -27,12 +27,14 @@ const Subscription = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [processingCheckout, setProcessingCheckout] = useState(false);
+  const [processedSuccess, setProcessedSuccess] = useState(false);
   
   // Handle URL parameters only once on mount
   useEffect(() => {
-    if (success && user) {
+    if (success && user && !processedSuccess) {
       toast.success("Subscription updated successfully!");
       refreshSubscription();
+      setProcessedSuccess(true);
       
       // Clear URL parameters to prevent duplicate notifications
       setSearchParams({});
@@ -44,7 +46,7 @@ const Subscription = () => {
       // Clear URL parameters to prevent duplicate notifications
       setSearchParams({});
     }
-  }, []);
+  }, [success, canceled, user, refreshSubscription, setSearchParams, processedSuccess]);
   
   useEffect(() => {
     const fetchPlans = async () => {
@@ -130,13 +132,13 @@ const Subscription = () => {
   const currentPlanId = subscription?.plan_id || 1; // Default to free plan
   
   const getIconForFeature = (feature: string) => {
-    if (feature.includes("storage")) return <Cloud className="h-4 w-4" />;
-    if (feature.includes("track")) return <Music className="h-4 w-4" />;
-    if (feature.includes("analytics")) return <BarChart className="h-4 w-4" />;
-    if (feature.includes("unlimited")) return <Clock className="h-4 w-4" />;
-    if (feature.includes("effects")) return <Waves className="h-4 w-4" />;
-    if (feature.includes("export")) return <Download className="h-4 w-4" />;
-    return <Check className="h-4 w-4" />;
+    if (feature.includes("storage")) return <Cloud className="h-4 w-4 mr-2" />;
+    if (feature.includes("track")) return <Music className="h-4 w-4 mr-2" />;
+    if (feature.includes("analytics")) return <BarChart className="h-4 w-4 mr-2" />;
+    if (feature.includes("unlimited")) return <Clock className="h-4 w-4 mr-2" />;
+    if (feature.includes("effects")) return <Waves className="h-4 w-4 mr-2" />;
+    if (feature.includes("export")) return <Download className="h-4 w-4 mr-2" />;
+    return <Check className="h-4 w-4 mr-2" />;
   };
   
   return (
@@ -150,8 +152,8 @@ const Subscription = () => {
         </div>
         
         {subscription && subscription.status === "active" && (
-          <div className="mb-8 p-4 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-between">
-            <div className="flex items-center">
+          <div className="mb-8 p-4 rounded-lg bg-primary/10 border border-primary/30 flex flex-col md:flex-row items-center justify-between">
+            <div className="flex items-center mb-4 md:mb-0">
               <Shield className="h-6 w-6 text-primary mr-3" />
               <div>
                 <p className="font-semibold">
@@ -233,7 +235,7 @@ const Subscription = () => {
                     
                     <Button
                       variant={isPro || isPremium ? "gradient" : "default"}
-                      className="w-full"
+                      className="w-full flex items-center justify-center"
                       disabled={isCurrentPlan || processingCheckout}
                       isLoading={processingCheckout}
                       onClick={() => handleSubscribe(plan.id)}

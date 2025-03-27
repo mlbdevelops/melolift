@@ -42,6 +42,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }, 0);
         } else {
           setProfile(null);
+          setSubscription(null);
         }
       }
     );
@@ -53,6 +54,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       if (currentSession?.user) {
         fetchProfile(currentSession.user.id);
+      } else {
+        setLoading(false);
       }
     });
 
@@ -75,44 +78,37 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       } else {
         setProfile(data);
       }
+      
+      // Fetch subscription after profile
+      fetchSubscription(userId);
     } catch (error) {
       console.error("Error fetching profile:", error);
       setProfile(null);
+      setLoading(false);
     }
   };
   
-  useEffect(() => {
-    const fetchSubscription = async () => {
-      if (user?.id) {
-        try {
-          const { data, error } = await supabase
-            .from('user_subscriptions')
-            .select('*')
-            .eq('user_id', user.id)
-            .maybeSingle();
-            
-          if (error) {
-            console.error("Error fetching subscription:", error);
-            setSubscription(null);
-          } else {
-            setSubscription(data);
-          }
-        } catch (error) {
-          console.error("Error fetching subscription:", error);
-          setSubscription(null);
-        } finally {
-          setLoading(false);
-        }
-      } else {
+  const fetchSubscription = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+        
+      if (error) {
+        console.error("Error fetching subscription:", error);
         setSubscription(null);
-        setLoading(false);
+      } else {
+        setSubscription(data);
       }
-    };
-    
-    if (user) {
-      fetchSubscription();
+    } catch (error) {
+      console.error("Error fetching subscription:", error);
+      setSubscription(null);
+    } finally {
+      setLoading(false);
     }
-  }, [user]);
+  };
   
   const refreshSubscription = async () => {
     if (user?.id) {
@@ -162,14 +158,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
     
     // Check the plan ID against your premium plans
-    const premiumPlanIds = [2, 3]; // Example: 2 is Pro, 3 is Premium
+    const premiumPlanIds = [2, 3]; // 2 is Pro, 3 is Premium
     
     if (!premiumPlanIds.includes(subscription.plan_id)) {
       return false;
     }
     
-    // Add more sophisticated logic here to check specific features
-    // based on the user's subscription plan if needed
+    // Special features only in Premium plan (id 3)
+    const premiumOnlyFeatures = [
+      'flac-export',
+      'advanced-effects',
+      'unlimited-projects'
+    ];
+    
+    if (premiumOnlyFeatures.includes(feature) && subscription.plan_id !== 3) {
+      return false;
+    }
+    
     return true;
   };
   

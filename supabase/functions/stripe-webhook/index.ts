@@ -122,9 +122,12 @@ serve(async (req) => {
           console.log(`Processing paid invoice for subscription ${subscription}`);
           
           try {
-            // Get the subscription
+            // Get the subscription details
             const subscriptionObject = await stripe.subscriptions.retrieve(subscription);
-            const { userId } = subscriptionObject.metadata;
+            
+            // Get the metadata (ensuring backward compatibility)
+            const metadata = subscriptionObject.metadata || {};
+            const userId = metadata.userId || '';
             
             if (userId) {
               // Update the subscription period
@@ -140,7 +143,30 @@ serve(async (req) => {
                 
               console.log(`Updated subscription period, result:`, result);
             } else {
-              console.error('No userId found in subscription metadata');
+              // Try to find by subscription ID if userId is not in metadata
+              const { data: subscriptionData, error: subscriptionError } = await supabase
+                .from('user_subscriptions')
+                .select('id, user_id')
+                .eq('stripe_subscription_id', subscription)
+                .maybeSingle();
+                
+              if (subscriptionError) {
+                console.error('Error finding subscription by ID:', subscriptionError);
+              } else if (subscriptionData) {
+                const result = await supabase
+                  .from('user_subscriptions')
+                  .update({
+                    status: 'active',
+                    current_period_start: new Date(invoice.period_start * 1000).toISOString(),
+                    current_period_end: new Date(invoice.period_end * 1000).toISOString(),
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', subscriptionData.id);
+                  
+                console.log(`Updated subscription period by ID, result:`, result);
+              } else {
+                console.error('No subscription found with ID:', subscription);
+              }
             }
           } catch (error) {
             console.error('Error retrieving subscription details:', error);

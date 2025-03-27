@@ -18,6 +18,8 @@ import GroovePad from "./pages/GroovePad";
 import Subscription from "./pages/Subscription";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Index from "./pages/Index";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +36,8 @@ const App = () => (
               <Route path="/" element={<LandingPage />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/index" element={<Index />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/privacy" element={<Privacy />} />
               <Route 
                 path="/dashboard" 
                 element={

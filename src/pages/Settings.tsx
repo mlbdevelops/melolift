@@ -1,397 +1,448 @@
-
 import { useState, useEffect } from "react";
-import { Bell, Volume2, Moon, Sun, Globe, Shield, Sliders, Save } from "lucide-react";
+import { Save, Moon, Sun, Volume2, VolumeX, Check } from "lucide-react";
 import { toast } from "sonner";
 import Layout from "../components/Layout";
-import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
-import { supabase } from "@/integrations/supabase/client";
+import Button from "../components/Button";
 import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 interface UserSettings {
-  notifications: {
-    emailNotifications: boolean;
-    pushNotifications: boolean;
-    marketingEmails: boolean;
-  };
-  audioSettings: {
-    masterVolume: number;
-    autoPlay: boolean;
-    highQualityStreaming: boolean;
-  };
-  appearance: {
-    darkMode: boolean;
-    compactView: boolean;
-  };
-  privacy: {
-    profileVisibility: string;
-    activityTracking: boolean;
-  };
+  theme: 'dark' | 'light' | 'system';
+  audioQuality: 'low' | 'medium' | 'high';
+  notifications: boolean;
+  exportFormat: 'mp3' | 'wav' | 'flac';
+  autoSave: boolean;
 }
 
-const defaultSettings: UserSettings = {
-  notifications: {
-    emailNotifications: true,
-    pushNotifications: true,
-    marketingEmails: false,
-  },
-  audioSettings: {
-    masterVolume: 80,
-    autoPlay: true,
-    highQualityStreaming: false,
-  },
-  appearance: {
-    darkMode: true,
-    compactView: false,
-  },
-  privacy: {
-    profileVisibility: "public",
-    activityTracking: true,
-  },
-};
-
 const Settings = () => {
-  const { user } = useAuth();
-  const [settings, setSettings] = useState<UserSettings>(defaultSettings);
-  const [loading, setLoading] = useState(false);
-  const [initialLoad, setInitialLoad] = useState(true);
-
+  const { user, isPremiumFeature } = useAuth();
+  const [saving, setSaving] = useState(false);
+  const [settings, setSettings] = useState<UserSettings>({
+    theme: 'dark',
+    audioQuality: 'medium',
+    notifications: true,
+    exportFormat: 'mp3', // Default export format is MP3
+    autoSave: true
+  });
+  
   useEffect(() => {
-    const loadSettings = async () => {
-      if (user) {
-        try {
-          setLoading(true);
-          
-          const { data, error } = await supabase
-            .from('user_preferences')
-            .select('settings')
-            .eq('user_id', user.id)
-            .maybeSingle();
-            
-          if (data && !error) {
-            // Safely convert the data.settings to UserSettings
-            const savedSettings = data.settings as Record<string, any>;
-            
-            if (savedSettings) {
-              // Merge saved settings with default settings to ensure all properties exist
-              const mergedSettings: UserSettings = {
-                notifications: {
-                  ...defaultSettings.notifications,
-                  ...(savedSettings.notifications || {})
-                },
-                audioSettings: {
-                  ...defaultSettings.audioSettings,
-                  ...(savedSettings.audioSettings || {})
-                },
-                appearance: {
-                  ...defaultSettings.appearance,
-                  ...(savedSettings.appearance || {})
-                },
-                privacy: {
-                  ...defaultSettings.privacy,
-                  ...(savedSettings.privacy || {})
-                }
-              };
-              
-              setSettings(mergedSettings);
-            }
-          }
-        } catch (error) {
-          console.error("Error loading settings:", error);
-          toast.error("Failed to load settings");
-        } finally {
-          setLoading(false);
-          setInitialLoad(false);
-        }
-      }
-    };
-    
-    loadSettings();
+    if (user) {
+      fetchUserSettings();
+    }
   }, [user]);
-
+  
+  const fetchUserSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('settings')
+        .eq('user_id', user.id)
+        .maybeSingle();
+        
+      if (error) throw error;
+      
+      if (data && data.settings) {
+        // Parse settings from JSON if needed
+        const userSettings = typeof data.settings === 'string' 
+          ? JSON.parse(data.settings)
+          : data.settings;
+          
+        setSettings({
+          ...settings,
+          ...userSettings
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching user settings:", error);
+    }
+  };
+  
   const saveSettings = async () => {
     if (!user) {
       toast.error("You must be logged in to save settings");
       return;
     }
     
-    setLoading(true);
+    setSaving(true);
+    
     try {
-      // Check if user already has settings
-      const { data: existingSettings, error: checkError } = await supabase
+      // Check if user has settings
+      const { data: existingData, error: fetchError } = await supabase
         .from('user_preferences')
         .select('id')
         .eq('user_id', user.id)
         .maybeSingle();
         
-      if (checkError) {
-        throw checkError;
-      }
+      if (fetchError) throw fetchError;
       
       let result;
       
-      if (existingSettings) {
+      if (existingData) {
         // Update existing settings
         result = await supabase
           .from('user_preferences')
-          .update({ settings, updated_at: new Date().toISOString() })
-          .eq('user_id', user.id);
+          .update({ 
+            settings: settings as any,
+            updated_at: new Date().toISOString() 
+          })
+          .eq('id', existingData.id);
       } else {
         // Insert new settings
         result = await supabase
           .from('user_preferences')
-          .insert({ user_id: user.id, settings });
+          .insert({ 
+            user_id: user.id,
+            settings: settings as any 
+          });
       }
       
-      if (result.error) {
-        throw result.error;
-      }
+      if (result.error) throw result.error;
       
       toast.success("Settings saved successfully");
+      
+      // Apply settings in real-time
+      applySettings();
     } catch (error) {
       console.error("Error saving settings:", error);
       toast.error("Failed to save settings");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
-
-  const updateSetting = (category, name, value) => {
+  
+  const applySettings = () => {
+    // Apply theme
+    document.documentElement.classList.remove('dark', 'light');
+    if (settings.theme !== 'system') {
+      document.documentElement.classList.add(settings.theme);
+    } else {
+      // Check system preference
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.add('light');
+      }
+    }
+    
+    // Other settings would be applied through context or localStorage
+    localStorage.setItem('userSettings', JSON.stringify(settings));
+    
+    // Apply audio settings (in a real app this would hook into audio contexts)
+    console.log("Applied settings:", settings);
+  };
+  
+  const handleChangeSetting = (
+    settingName: keyof UserSettings, 
+    value: string | boolean
+  ) => {
     setSettings(prev => ({
       ...prev,
-      [category]: {
-        ...prev[category],
-        [name]: value
-      }
+      [settingName]: value
     }));
   };
-
+  
+  const renderPremiumFeature = (
+    feature: JSX.Element, 
+    featureName: string
+  ) => {
+    const hasPremiumAccess = isPremiumFeature(featureName);
+    
+    if (hasPremiumAccess) {
+      return feature;
+    }
+    
+    return (
+      <div className="relative">
+        <div className="opacity-50 pointer-events-none">
+          {feature}
+        </div>
+        <div 
+          className="absolute inset-0 flex items-center justify-center bg-dark-300/80 cursor-pointer"
+          onClick={() => {
+            toast.info(
+              <div>
+                <p className="font-bold mb-2">Premium Feature</p>
+                <p>Upgrade to access premium audio quality settings.</p>
+                <Button 
+                  variant="gradient" 
+                  size="sm" 
+                  className="mt-2"
+                  onClick={() => window.location.href = '/subscription'}
+                >
+                  Upgrade Now
+                </Button>
+              </div>
+            );
+          }}
+        >
+          <div className="bg-accent-purple text-white text-xs px-2 py-1 rounded-full">
+            PREMIUM
+          </div>
+        </div>
+      </div>
+    );
+  };
+  
   return (
     <Layout>
-      <div className="container max-w-4xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Settings</h1>
-        
-        {/* Notifications Section */}
-        <div className="glass-card mb-8 p-6 rounded-xl">
-          <div className="flex items-center mb-4">
-            <Bell className="h-6 w-6 mr-2 text-primary" />
-            <h2 className="text-xl font-semibold">Notifications</h2>
+      <div className="container mx-auto p-4 md:p-8 max-w-4xl">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold">Settings</h1>
+            <p className="text-light-100/60">Customize your MeloLift experience</p>
           </div>
           
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium">Email Notifications</h3>
-                <p className="text-sm text-light-100/60">Receive email updates about your account</p>
-              </div>
-              <Switch 
-                checked={settings.notifications.emailNotifications}
-                onCheckedChange={(checked) => updateSetting('notifications', 'emailNotifications', checked)}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium">Push Notifications</h3>
-                <p className="text-sm text-light-100/60">Get notified when someone interacts with your music</p>
-              </div>
-              <Switch 
-                checked={settings.notifications.pushNotifications}
-                onCheckedChange={(checked) => updateSetting('notifications', 'pushNotifications', checked)}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium">Marketing Emails</h3>
-                <p className="text-sm text-light-100/60">Receive updates about new features and offers</p>
-              </div>
-              <Switch 
-                checked={settings.notifications.marketingEmails}
-                onCheckedChange={(checked) => updateSetting('notifications', 'marketingEmails', checked)}
-              />
-            </div>
-          </div>
-        </div>
-        
-        {/* Audio Settings Section */}
-        <div className="glass-card mb-8 p-6 rounded-xl">
-          <div className="flex items-center mb-4">
-            <Volume2 className="h-6 w-6 mr-2 text-primary" />
-            <h2 className="text-xl font-semibold">Audio Settings</h2>
-          </div>
-          
-          <div className="space-y-6">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-medium">Master Volume</h3>
-                <span>{settings.audioSettings.masterVolume}%</span>
-              </div>
-              <Slider 
-                value={[settings.audioSettings.masterVolume]} 
-                onValueChange={([value]) => updateSetting('audioSettings', 'masterVolume', value)}
-                max={100}
-                step={1}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium">Auto-play</h3>
-                <p className="text-sm text-light-100/60">Automatically play music when available</p>
-              </div>
-              <Switch 
-                checked={settings.audioSettings.autoPlay}
-                onCheckedChange={(checked) => updateSetting('audioSettings', 'autoPlay', checked)}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium">High Quality Streaming</h3>
-                <p className="text-sm text-light-100/60">Stream music at higher bitrates (uses more data)</p>
-              </div>
-              <Switch 
-                checked={settings.audioSettings.highQualityStreaming}
-                onCheckedChange={(checked) => updateSetting('audioSettings', 'highQualityStreaming', checked)}
-              />
-            </div>
-          </div>
-        </div>
-        
-        {/* Appearance Section */}
-        <div className="glass-card mb-8 p-6 rounded-xl">
-          <div className="flex items-center mb-4">
-            {settings.appearance.darkMode ? 
-              <Moon className="h-6 w-6 mr-2 text-primary" /> : 
-              <Sun className="h-6 w-6 mr-2 text-primary" />
-            }
-            <h2 className="text-xl font-semibold">Appearance</h2>
-          </div>
-          
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium">Dark Mode</h3>
-                <p className="text-sm text-light-100/60">Toggle between dark and light theme</p>
-              </div>
-              <Switch 
-                checked={settings.appearance.darkMode}
-                onCheckedChange={(checked) => updateSetting('appearance', 'darkMode', checked)}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium">Compact View</h3>
-                <p className="text-sm text-light-100/60">Display more items with less spacing</p>
-              </div>
-              <Switch 
-                checked={settings.appearance.compactView}
-                onCheckedChange={(checked) => updateSetting('appearance', 'compactView', checked)}
-              />
-            </div>
-          </div>
-        </div>
-        
-        {/* Privacy Section */}
-        <div className="glass-card mb-8 p-6 rounded-xl">
-          <div className="flex items-center mb-4">
-            <Shield className="h-6 w-6 mr-2 text-primary" />
-            <h2 className="text-xl font-semibold">Privacy</h2>
-          </div>
-          
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium">Profile Visibility</h3>
-                <p className="text-sm text-light-100/60">Control who can see your profile</p>
-              </div>
-              <select 
-                className="bg-dark-200 border border-dark-100 rounded px-3 py-2"
-                value={settings.privacy.profileVisibility}
-                onChange={(e) => updateSetting('privacy', 'profileVisibility', e.target.value)}
-              >
-                <option value="public">Public</option>
-                <option value="friends">Friends Only</option>
-                <option value="private">Private</option>
-              </select>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium">Activity Tracking</h3>
-                <p className="text-sm text-light-100/60">Allow us to track how you use the app</p>
-              </div>
-              <Switch 
-                checked={settings.privacy.activityTracking}
-                onCheckedChange={(checked) => updateSetting('privacy', 'activityTracking', checked)}
-              />
-            </div>
-          </div>
-        </div>
-        
-        {/* Advanced Section */}
-        <div className="glass-card mb-8 p-6 rounded-xl">
-          <div className="flex items-center mb-4">
-            <Sliders className="h-6 w-6 mr-2 text-primary" />
-            <h2 className="text-xl font-semibold">Advanced</h2>
-          </div>
-          
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium">Clear Cache</h3>
-                <p className="text-sm text-light-100/60">Remove downloaded content and temporary files</p>
-              </div>
-              <button 
-                onClick={() => {
-                  localStorage.clear();
-                  toast.success("Cache cleared successfully");
-                }}
-                className="bg-dark-100 hover:bg-dark-50 text-white px-4 py-2 rounded transition-colors"
-              >
-                Clear
-              </button>
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium">Reset Settings</h3>
-                <p className="text-sm text-light-100/60">Restore all settings to default values</p>
-              </div>
-              <button 
-                onClick={() => {
-                  setSettings(defaultSettings);
-                  toast.success("Settings reset to defaults");
-                }}
-                className="bg-dark-100 hover:bg-dark-50 text-white px-4 py-2 rounded transition-colors"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        {/* Save Button */}
-        <div className="flex justify-end">
-          <button
+          <Button
+            variant="gradient"
+            className="mt-4 md:mt-0 flex items-center"
             onClick={saveSettings}
-            disabled={loading}
-            className="flex items-center gap-2 bg-gradient-to-r from-primary to-primary-light px-6 py-3 rounded-lg text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+            isLoading={saving}
           >
-            {loading ? (
-              <>
-                <div className="animate-spin h-4 w-4 border-2 border-t-transparent border-white rounded-full"></div>
-                <span>Saving...</span>
-              </>
-            ) : (
-              <>
-                <Save className="h-5 w-5" />
-                <span>Save Changes</span>
-              </>
-            )}
-          </button>
+            <Save className="h-4 w-4 mr-2" />
+            Save Settings
+          </Button>
+        </div>
+        
+        <div className="space-y-8">
+          <div className="glass-card p-6">
+            <h2 className="text-xl font-semibold mb-4">Appearance</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-medium mb-2">Theme</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <button
+                    className={`flex flex-col items-center justify-center p-4 rounded-lg border ${
+                      settings.theme === 'dark' 
+                        ? 'border-primary bg-primary/10' 
+                        : 'border-white/10 hover:border-white/30'
+                    }`}
+                    onClick={() => handleChangeSetting('theme', 'dark')}
+                  >
+                    <Moon className="h-6 w-6 mb-2" />
+                    <span>Dark</span>
+                    {settings.theme === 'dark' && (
+                      <div className="absolute top-2 right-2 text-primary">
+                        <Check className="h-4 w-4" />
+                      </div>
+                    )}
+                  </button>
+                  
+                  <button
+                    className={`flex flex-col items-center justify-center p-4 rounded-lg border ${
+                      settings.theme === 'light' 
+                        ? 'border-primary bg-primary/10' 
+                        : 'border-white/10 hover:border-white/30'
+                    }`}
+                    onClick={() => handleChangeSetting('theme', 'light')}
+                  >
+                    <Sun className="h-6 w-6 mb-2" />
+                    <span>Light</span>
+                    {settings.theme === 'light' && (
+                      <div className="absolute top-2 right-2 text-primary">
+                        <Check className="h-4 w-4" />
+                      </div>
+                    )}
+                  </button>
+                  
+                  <button
+                    className={`flex flex-col items-center justify-center p-4 rounded-lg border ${
+                      settings.theme === 'system' 
+                        ? 'border-primary bg-primary/10' 
+                        : 'border-white/10 hover:border-white/30'
+                    }`}
+                    onClick={() => handleChangeSetting('theme', 'system')}
+                  >
+                    <div className="flex mb-2">
+                      <Sun className="h-6 w-6" />
+                      <Moon className="h-6 w-6 ml-1" />
+                    </div>
+                    <span>System</span>
+                    {settings.theme === 'system' && (
+                      <div className="absolute top-2 right-2 text-primary">
+                        <Check className="h-4 w-4" />
+                      </div>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="glass-card p-6">
+            <h2 className="text-xl font-semibold mb-4">Audio Settings</h2>
+            
+            <div className="space-y-6">
+              {renderPremiumFeature(
+                <div>
+                  <h3 className="text-sm font-medium mb-2">Audio Quality</h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    <button
+                      className={`flex flex-col items-center justify-center p-4 rounded-lg border ${
+                        settings.audioQuality === 'low' 
+                          ? 'border-primary bg-primary/10' 
+                          : 'border-white/10 hover:border-white/30'
+                      }`}
+                      onClick={() => handleChangeSetting('audioQuality', 'low')}
+                    >
+                      <Volume2 className="h-6 w-6 mb-2 opacity-50" />
+                      <span>Low</span>
+                      {settings.audioQuality === 'low' && (
+                        <div className="absolute top-2 right-2 text-primary">
+                          <Check className="h-4 w-4" />
+                        </div>
+                      )}
+                    </button>
+                    
+                    <button
+                      className={`flex flex-col items-center justify-center p-4 rounded-lg border ${
+                        settings.audioQuality === 'medium' 
+                          ? 'border-primary bg-primary/10' 
+                          : 'border-white/10 hover:border-white/30'
+                      }`}
+                      onClick={() => handleChangeSetting('audioQuality', 'medium')}
+                    >
+                      <Volume2 className="h-6 w-6 mb-2 opacity-75" />
+                      <span>Medium</span>
+                      {settings.audioQuality === 'medium' && (
+                        <div className="absolute top-2 right-2 text-primary">
+                          <Check className="h-4 w-4" />
+                        </div>
+                      )}
+                    </button>
+                    
+                    <button
+                      className={`flex flex-col items-center justify-center p-4 rounded-lg border ${
+                        settings.audioQuality === 'high' 
+                          ? 'border-primary bg-primary/10' 
+                          : 'border-white/10 hover:border-white/30'
+                      }`}
+                      onClick={() => handleChangeSetting('audioQuality', 'high')}
+                    >
+                      <Volume2 className="h-6 w-6 mb-2" />
+                      <span>High</span>
+                      {settings.audioQuality === 'high' && (
+                        <div className="absolute top-2 right-2 text-primary">
+                          <Check className="h-4 w-4" />
+                        </div>
+                      )}
+                    </button>
+                  </div>
+                </div>,
+                'high-quality-audio'
+              )}
+              
+              <div>
+                <h3 className="text-sm font-medium mb-2">Export Format</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <button
+                    className={`flex flex-col items-center justify-center p-4 rounded-lg border ${
+                      settings.exportFormat === 'mp3' 
+                        ? 'border-primary bg-primary/10' 
+                        : 'border-white/10 hover:border-white/30'
+                    }`}
+                    onClick={() => handleChangeSetting('exportFormat', 'mp3')}
+                  >
+                    <span className="text-lg font-mono mb-2">MP3</span>
+                    <span className="text-xs">Compressed</span>
+                    {settings.exportFormat === 'mp3' && (
+                      <div className="absolute top-2 right-2 text-primary">
+                        <Check className="h-4 w-4" />
+                      </div>
+                    )}
+                  </button>
+                  
+                  {renderPremiumFeature(
+                    <button
+                      className={`flex flex-col items-center justify-center p-4 rounded-lg border ${
+                        settings.exportFormat === 'wav' 
+                          ? 'border-primary bg-primary/10' 
+                          : 'border-white/10 hover:border-white/30'
+                      }`}
+                      onClick={() => handleChangeSetting('exportFormat', 'wav')}
+                    >
+                      <span className="text-lg font-mono mb-2">WAV</span>
+                      <span className="text-xs">Lossless</span>
+                      {settings.exportFormat === 'wav' && (
+                        <div className="absolute top-2 right-2 text-primary">
+                          <Check className="h-4 w-4" />
+                        </div>
+                      )}
+                    </button>,
+                    'wav-export'
+                  )}
+                  
+                  {renderPremiumFeature(
+                    <button
+                      className={`flex flex-col items-center justify-center p-4 rounded-lg border ${
+                        settings.exportFormat === 'flac' 
+                          ? 'border-primary bg-primary/10' 
+                          : 'border-white/10 hover:border-white/30'
+                      }`}
+                      onClick={() => handleChangeSetting('exportFormat', 'flac')}
+                    >
+                      <span className="text-lg font-mono mb-2">FLAC</span>
+                      <span className="text-xs">Audiophile</span>
+                      {settings.exportFormat === 'flac' && (
+                        <div className="absolute top-2 right-2 text-primary">
+                          <Check className="h-4 w-4" />
+                        </div>
+                      )}
+                    </button>,
+                    'flac-export'
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="glass-card p-6">
+            <h2 className="text-xl font-semibold mb-4">Application Settings</h2>
+            
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium">Notifications</h3>
+                  <p className="text-xs text-light-100/60">
+                    Receive notifications about project updates
+                  </p>
+                </div>
+                <div 
+                  className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${
+                    settings.notifications ? 'bg-primary' : 'bg-dark-300'
+                  }`}
+                  onClick={() => handleChangeSetting('notifications', !settings.notifications)}
+                >
+                  <div 
+                    className={`w-4 h-4 rounded-full bg-white transform transition-transform ${
+                      settings.notifications ? 'translate-x-6' : 'translate-x-0'
+                    }`} 
+                  />
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium">Auto-Save</h3>
+                  <p className="text-xs text-light-100/60">
+                    Automatically save projects while working
+                  </p>
+                </div>
+                <div 
+                  className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${
+                    settings.autoSave ? 'bg-primary' : 'bg-dark-300'
+                  }`}
+                  onClick={() => handleChangeSetting('autoSave', !settings.autoSave)}
+                >
+                  <div 
+                    className={`w-4 h-4 rounded-full bg-white transform transition-transform ${
+                      settings.autoSave ? 'translate-x-6' : 'translate-x-0'
+                    }`} 
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </Layout>
