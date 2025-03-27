@@ -74,14 +74,17 @@ serve(async (req) => {
     let priceId = plan.stripe_price_id;
     
     if (!priceId) {
-      // Create a one-time price
+      // Create a product first
+      const product = await stripe.products.create({
+        name: `${plan.name} Plan`,
+        active: true,
+      });
+      
+      // Then create a price for the product
       const price = await stripe.prices.create({
         unit_amount: Math.round(plan.price * 100), // Convert to cents
         currency: 'usd',
-        product_data: {
-          name: `${plan.name} Plan`,
-          description: plan.description,
-        },
+        product: product.id,
         recurring: {
           interval: 'month',
         },
@@ -95,6 +98,8 @@ serve(async (req) => {
         .update({ stripe_price_id: priceId })
         .eq('id', planId);
     }
+    
+    console.log('Creating checkout session with price ID:', priceId);
     
     // Create checkout session
     const session = await stripe.checkout.sessions.create({
@@ -113,6 +118,8 @@ serve(async (req) => {
         planId: planId.toString(),
       },
     });
+    
+    console.log('Checkout session created:', session.id);
     
     // Return the session URL
     return new Response(
