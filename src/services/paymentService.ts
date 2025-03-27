@@ -9,13 +9,13 @@ export const initiateStripeCheckout = async (planId: number, userId: string): Pr
     // Show a loading toast while the checkout process is initializing
     const toastId = toast.loading("Preparing checkout...");
     
-    // Call the create-checkout edge function
+    // Call the create-checkout edge function with live mode explicitly set
     const { data, error } = await supabase.functions.invoke('create-checkout', {
       body: {
         planId,
         userId,
         returnUrl: window.location.origin + '/subscription',
-        mode: 'live' // Set to 'live' mode
+        mode: 'live' // Always use live mode
       }
     });
     

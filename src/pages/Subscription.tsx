@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Check, Shield, Cloud, Music, BarChart, Clock, Waves, Download } from "lucide-react";
 import { toast } from "sonner";
@@ -22,6 +21,7 @@ const Subscription = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const success = searchParams.get('success');
   const canceled = searchParams.get('canceled');
+  const sessionId = searchParams.get('session_id');
   
   const { user, subscription, refreshSubscription } = useAuth();
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -29,15 +29,20 @@ const Subscription = () => {
   const [processingCheckout, setProcessingCheckout] = useState(false);
   const [processedSuccess, setProcessedSuccess] = useState(false);
   
-  // Handle URL parameters only once on mount
+  // Handle URL parameters only once on mount with improved logic
   useEffect(() => {
-    if (success && user && !processedSuccess) {
-      toast.success("Subscription updated successfully!");
-      refreshSubscription();
-      setProcessedSuccess(true);
+    if (success && sessionId && user && !processedSuccess) {
+      // Wait a moment for the webhook to process the subscription
+      const timer = setTimeout(() => {
+        refreshSubscription();
+        toast.success("Subscription updated successfully!");
+        setProcessedSuccess(true);
+        
+        // Clear URL parameters to prevent duplicate notifications
+        setSearchParams({});
+      }, 2000);
       
-      // Clear URL parameters to prevent duplicate notifications
-      setSearchParams({});
+      return () => clearTimeout(timer);
     }
     
     if (canceled) {
@@ -46,7 +51,26 @@ const Subscription = () => {
       // Clear URL parameters to prevent duplicate notifications
       setSearchParams({});
     }
-  }, [success, canceled, user, refreshSubscription, setSearchParams, processedSuccess]);
+  }, [success, canceled, sessionId, user, refreshSubscription, setSearchParams, processedSuccess]);
+  
+  // Fetch subscription status periodically after successful checkout
+  useEffect(() => {
+    if (success && sessionId && user) {
+      const checkInterval = setInterval(() => {
+        refreshSubscription();
+      }, 5000);
+      
+      // Stop checking after 30 seconds
+      const timeout = setTimeout(() => {
+        clearInterval(checkInterval);
+      }, 30000);
+      
+      return () => {
+        clearInterval(checkInterval);
+        clearTimeout(timeout);
+      };
+    }
+  }, [success, sessionId, user, refreshSubscription]);
   
   useEffect(() => {
     const fetchPlans = async () => {

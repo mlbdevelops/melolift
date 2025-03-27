@@ -33,6 +33,9 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             "h-10 w-10 rounded-md": size === "icon",
           },
           
+          // Fix horizontal alignment of icon and text
+          "[&>svg]:inline-block [&>svg]:align-middle",
+          
           className
         )}
         {...props}
@@ -42,7 +45,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
           </div>
         ) : null}
-        <span className={cn(isLoading ? "opacity-0" : "opacity-100")}>
+        <span className={cn(isLoading ? "opacity-0" : "opacity-100", "flex items-center")}>
           {children}
         </span>
       </button>

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Save, Download, Volume, VolumeX, ArrowLeft, Loader, Share2, Play, Pause, ChevronRight } from "lucide-react";
@@ -13,6 +12,7 @@ import { useAudioPlayer } from "../hooks/useAudioPlayer";
 import { audioBufferToWav } from "../services/audioService";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useIsMobile } from "../hooks/use-mobile";
 
 interface ProjectData {
   id: string;
@@ -25,6 +25,7 @@ interface ProjectData {
 }
 
 const Studio = () => {
+  const isMobile = useIsMobile();
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get('project');
   const navigate = useNavigate();
@@ -194,16 +195,16 @@ const Studio = () => {
   
   return (
     <Layout>
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 max-w-full overflow-x-hidden">
         {loading ? (
           <div className="flex justify-center items-center h-64">
             <Loader className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
           <>
-            {/* Header */}
-            <div className="flex flex-wrap justify-between items-center mb-8 gap-4">
-              <div className="flex items-center gap-4">
+            {/* Header - make more responsive for small screens */}
+            <div className="flex flex-wrap justify-between items-center mb-6 gap-3">
+              <div className="flex items-center gap-3">
                 <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
@@ -213,22 +214,22 @@ const Studio = () => {
                     type="text"
                     value={projectTitle}
                     onChange={(e) => setProjectTitle(e.target.value)}
-                    className="bg-transparent border-b border-white/10 focus:border-primary focus:outline-none text-xl font-bold py-1 px-2"
+                    className="bg-transparent border-b border-white/10 focus:border-primary focus:outline-none text-xl font-bold py-1 px-2 w-full"
+                    style={{ maxWidth: isMobile ? '180px' : '300px' }}
                   />
                 </div>
               </div>
               
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex items-center gap-1"
                   onClick={() => setIsMuted(!isMuted)}
                 >
                   {isMuted ? (
-                    <VolumeX className="h-4 w-4" />
+                    <VolumeX className="h-4 w-4 mr-1" />
                   ) : (
-                    <Volume className="h-4 w-4" />
+                    <Volume className="h-4 w-4 mr-1" />
                   )}
                   <span className="hidden sm:inline">{isMuted ? "Unmute" : "Mute"}</span>
                 </Button>
@@ -236,75 +237,72 @@ const Studio = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex items-center gap-1"
                   onClick={handleShare}
                 >
-                  <Share2 className="h-4 w-4" />
+                  <Share2 className="h-4 w-4 mr-1" />
                   <span className="hidden sm:inline">Share</span>
                 </Button>
                 
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex items-center gap-1"
                   onClick={handleExportAudio}
                   disabled={!processedAudioBuffer}
                 >
-                  <Download className="h-4 w-4" />
+                  <Download className="h-4 w-4 mr-1" />
                   <span className="hidden sm:inline">Export</span>
                 </Button>
                 
                 <Button
                   variant="gradient"
                   size="sm"
-                  className="flex items-center gap-1"
                   onClick={handleSaveProject}
                 >
-                  <Save className="h-4 w-4" />
+                  <Save className="h-4 w-4 mr-1" />
                   <span className="hidden sm:inline">Save</span>
                 </Button>
               </div>
             </div>
             
-            {/* Progress Steps */}
-            <div className="mb-8">
-              <div className="flex items-center">
+            {/* Progress Steps - simplify for mobile */}
+            <div className="mb-6 overflow-x-auto pb-2">
+              <div className={`flex ${isMobile ? 'w-max min-w-full' : ''} items-center`}>
                 <div className={`flex items-center ${activeStep === 'vocal' ? 'text-primary' : 'text-light-100/60'}`}>
                   <div className={`w-8 h-8 rounded-full ${activeStep === 'vocal' ? 'bg-primary text-white' : 'bg-dark-300 text-light-100/60'} flex items-center justify-center mr-2`}>
                     1
                   </div>
-                  <span className="font-medium">Record or Upload Vocals</span>
+                  <span className="font-medium whitespace-nowrap">Record Vocals</span>
                 </div>
                 
-                <div className="w-12 h-px bg-light-100/20 mx-4"></div>
+                <div className="w-8 h-px bg-light-100/20 mx-2 sm:mx-4"></div>
                 
                 <div className={`flex items-center ${activeStep === 'instrumental' ? 'text-primary' : 'text-light-100/20'}`}>
                   <div className={`w-8 h-8 rounded-full ${activeStep === 'instrumental' ? 'bg-primary text-white' : 'bg-dark-300 text-light-100/20'} flex items-center justify-center mr-2`}>
                     2
                   </div>
-                  <span className="font-medium">Select Instrumental</span>
+                  <span className="font-medium whitespace-nowrap">Select Instrumental</span>
                 </div>
                 
-                <div className="w-12 h-px bg-light-100/20 mx-4"></div>
+                <div className="w-8 h-px bg-light-100/20 mx-2 sm:mx-4"></div>
                 
                 <div className="flex items-center text-light-100/20">
                   <div className="w-8 h-8 rounded-full bg-dark-300 text-light-100/20 flex items-center justify-center mr-2">
                     3
                   </div>
-                  <span className="font-medium">Mix & Process</span>
+                  <span className="font-medium whitespace-nowrap">Mix & Process</span>
                 </div>
               </div>
             </div>
             
-            {/* Main content */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main content - better responsive layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
               {/* Left column */}
-              <div className="lg:col-span-2 space-y-6">
+              <div className="lg:col-span-2 space-y-4 sm:space-y-6">
                 {/* Waveform visualization */}
-                <div className="glass-card p-6">
+                <div className="glass-card p-4 sm:p-6">
                   <h2 className="text-xl font-semibold mb-4">Audio Preview</h2>
                   
-                  <div className="h-40 bg-dark-300 rounded-lg overflow-hidden relative">
+                  <div className="h-32 sm:h-40 bg-dark-300 rounded-lg overflow-hidden relative">
                     <AudioVisualizer isPlaying={isPlaying && !isProcessing} />
                     
                     {isProcessing && (
@@ -315,27 +313,26 @@ const Studio = () => {
                     )}
                   </div>
                   
-                  <div className="flex justify-between items-center mt-4">
+                  <div className="flex flex-wrap justify-between items-center mt-4 gap-2">
                     <div className="text-sm text-light-100/60">
                       {vocalAudioBlob ? "Vocal track ready" : "Waiting for vocal track..."}
                     </div>
                     
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {vocalAudioBlob && processedAudioBuffer && (
                         <Button
                           variant="outline"
                           size="sm"
-                          className="flex items-center gap-1"
                           onClick={togglePlayback}
                         >
                           {isPlaying ? (
                             <>
-                              <Pause className="h-4 w-4" />
+                              <Pause className="h-4 w-4 mr-1" />
                               <span>Pause</span>
                             </>
                           ) : (
                             <>
-                              <Play className="h-4 w-4" />
+                              <Play className="h-4 w-4 mr-1" />
                               <span>Play</span>
                             </>
                           )}
@@ -346,11 +343,10 @@ const Studio = () => {
                         <Button
                           variant="gradient"
                           size="sm"
-                          className="flex items-center gap-1"
                           onClick={handleProceedToMixing}
                         >
                           Continue to Mixing
-                          <ChevronRight className="h-4 w-4" />
+                          <ChevronRight className="h-4 w-4 ml-1" />
                         </Button>
                       )}
                     </div>
@@ -362,15 +358,15 @@ const Studio = () => {
                   // Vocal recorder
                   <VocalRecorder />
                 ) : (
-                  // Instrumental browser
+                  // Instrumental browser 
                   <InstrumentalBrowser />
                 )}
               </div>
               
               {/* Right column */}
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 {/* Step Instructions */}
-                <div className="glass-card p-6">
+                <div className="glass-card p-4 sm:p-6">
                   <h3 className="text-xl font-semibold mb-4">
                     {activeStep === 'vocal' ? 'Record Your Vocals' : 'Choose an Instrumental'}
                   </h3>
@@ -445,7 +441,7 @@ const Studio = () => {
                 </div>
                 
                 {/* Project info */}
-                <div className="glass-card p-6">
+                <div className="glass-card p-4 sm:p-6">
                   <h3 className="text-xl font-semibold mb-4">Project Info</h3>
                   
                   <div className="space-y-4">
@@ -475,14 +471,14 @@ const Studio = () => {
                       className="w-full"
                       onClick={handleSaveProject}
                     >
-                      <Save className="h-4 w-4 mr-2" />
+                      <Save className="h-4 w-4 mr-1" />
                       Save Project
                     </Button>
                   </div>
                 </div>
                 
                 {/* Help section */}
-                <div className="glass-card p-6">
+                <div className="glass-card p-4 sm:p-6">
                   <h3 className="text-xl font-semibold mb-4">Need Help?</h3>
                   
                   <p className="text-light-100/70 text-sm mb-4">

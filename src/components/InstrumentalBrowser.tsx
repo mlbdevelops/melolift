@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { Music, Search, ArrowUp, ArrowDown, Play, Pause, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -137,20 +136,32 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
     setIsLoading(true);
     
     try {
-      // In a real app, we would load the actual audio from the URL
-      const audioBlob = await loadAudioFromUrl(instrumental.audioUrl);
+      // Use a more reliable error handling approach
+      const audioBlob = await loadAudioFromUrl(instrumental.audioUrl)
+        .catch(error => {
+          console.error("Error fetching audio:", error);
+          toast.error(`Failed to load instrumental: ${error.message || "Unknown error"}`);
+          throw error;
+        });
+      
       setInstrumentalBlob(audioBlob);
       setInstrumentalAudioBlob(audioBlob);
       
-      // Convert to audio buffer for playback
-      const buffer = await blobToAudioBuffer(audioBlob);
-      setAudioBuffer(buffer);
-      
-      onSelect?.(instrumental);
-      toast.success(`Selected "${instrumental.title}"`);
+      // Convert to audio buffer for playback with better error handling
+      try {
+        const buffer = await blobToAudioBuffer(audioBlob);
+        setAudioBuffer(buffer);
+        
+        onSelect?.(instrumental);
+        toast.success(`Selected "${instrumental.title}"`);
+      } catch (bufferError) {
+        console.error("Error converting to audio buffer:", bufferError);
+        toast.error("Failed to process audio data");
+        throw bufferError;
+      }
     } catch (error) {
-      console.error("Error loading instrumental:", error);
-      toast.error("Failed to load instrumental");
+      console.error("Error in instrumental selection:", error);
+      // Error already toasted in the inner catch
     } finally {
       setIsLoading(false);
     }
@@ -228,7 +239,7 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
     <div className={`glass-card p-4 sm:p-6 ${className}`}>
       <h3 className="text-xl font-semibold mb-4">Instrumental Browser</h3>
       
-      {/* Action buttons */}
+      {/* Action buttons - make more responsive */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <Button 
           variant="outline" 
@@ -267,7 +278,7 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
         />
       </div>
       
-      {/* Table header */}
+      {/* Make the overall layout more responsive */}
       <div className="hidden md:grid grid-cols-12 gap-4 mb-2 text-sm text-light-100/60 font-medium">
         <div 
           className="col-span-5 flex items-center gap-1 cursor-pointer" 
@@ -299,7 +310,7 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
         <div className="col-span-2">Key</div>
       </div>
       
-      {/* Instrumentals list */}
+      {/* Make this container fit better on small screens */}
       <div className={`${isMobile ? 'max-h-40' : 'max-h-60'} overflow-y-auto scrollbar-none`}>
         {filteredInstrumentals.length === 0 ? (
           <div className="text-center py-8 text-light-100/40">
@@ -314,7 +325,7 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
               }`}
               onClick={() => handleInstrumentalSelect(instrumental)}
             >
-              {/* Mobile view */}
+              {/* Mobile view - improved layout */}
               <div className="col-span-12 md:hidden flex flex-col gap-1">
                 <div className="font-medium">{instrumental.title}</div>
                 <div className="text-sm text-light-100/60 flex items-center gap-4 flex-wrap">
@@ -369,7 +380,7 @@ const InstrumentalBrowser = ({ onSelect, className = "" }: InstrumentalBrowserPr
               disabled={isLoading}
               className="flex items-center gap-2"
             >
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              {isPlaying ? <Pause className="h-4 w-4 mr-1" /> : <Play className="h-4 w-4 mr-1" />}
               {isPlaying ? "Pause" : "Play"}
             </Button>
           </div>

@@ -114,7 +114,7 @@ const Dashboard = () => {
                 
                 <div className="flex justify-end gap-2">
                   <Button 
-                    variant="secondary" 
+                    variant="outline" 
                     size="sm"
                     onClick={() => handleMixProject(project.id)}
                   >
@@ -130,7 +130,7 @@ const Dashboard = () => {
                     Edit
                   </Button>
                   <Button 
-                    variant="destructive" 
+                    variant="outline" 
                     size="sm"
                     onClick={() => handleDeleteProject(project.id)}
                   >
