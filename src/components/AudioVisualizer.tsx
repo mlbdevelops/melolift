@@ -1,5 +1,6 @@
 
 import { useEffect, useRef, useState } from "react";
+import { toast } from "@/hooks/use-toast";
 
 interface AudioVisualizerProps {
   audioUrl?: string;
