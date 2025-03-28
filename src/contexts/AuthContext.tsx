@@ -2,6 +2,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
+import { toast } from 'sonner';
 
 interface AuthContextType {
   user: any | null;
@@ -9,6 +10,9 @@ interface AuthContextType {
   profile: any | null;
   subscription: Tables<'user_subscriptions'> | null;
   loading: boolean;
+  signUp: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   isPremiumFeature: (feature: string) => boolean;
   refreshSubscription: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -110,6 +114,47 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
   
+  const signUp = async (email: string, password: string) => {
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      
+      if (error) throw error;
+    } catch (error) {
+      console.error("Sign up error:", error);
+      throw error;
+    }
+  };
+  
+  const signIn = async (email: string, password: string) => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) throw error;
+    } catch (error) {
+      console.error("Sign in error:", error);
+      throw error;
+    }
+  };
+  
+  const signInWithGoogle = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+      });
+      
+      if (error) throw error;
+    } catch (error) {
+      console.error("Google sign in error:", error);
+      throw error;
+    }
+  };
+  
   const refreshSubscription = async () => {
     if (user?.id) {
       try {
@@ -167,12 +212,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Special features only in Premium plan (id 3)
     const premiumOnlyFeatures = [
       'flac-export',
+      'wav-export',
       'advanced-effects',
-      'unlimited-projects'
+      'unlimited-projects',
+      'background-voices',
+      'extended-mixing'
     ];
     
     if (premiumOnlyFeatures.includes(feature) && subscription.plan_id !== 3) {
       return false;
+    }
+    
+    // Pro features - available to both Pro and Premium plans
+    const proFeatures = [
+      'mp3-export',
+      'high-quality-export',
+      'additional-presets',
+      'cloud-storage'
+    ];
+    
+    // All Pro features are available to Pro and Premium plans
+    if (proFeatures.includes(feature)) {
+      return true;
     }
     
     return true;
@@ -184,6 +245,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     profile,
     subscription,
     loading,
+    signUp,
+    signIn,
+    signInWithGoogle,
     isPremiumFeature,
     refreshSubscription,
     refreshProfile,
