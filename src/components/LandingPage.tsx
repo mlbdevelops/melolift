@@ -66,7 +66,7 @@ const LandingPage = () => {
         <div className="flex items-center gap-4">
           {user ? (
             <Button onClick={() => navigate("/dashboard")}>
-              Go to Dashboard
+              Your Dashboard
             </Button>
           ) : (
             <>
