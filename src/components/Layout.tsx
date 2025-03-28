@@ -11,7 +11,7 @@ const Layout = ({ children, hideNavbar = false }: LayoutProps) => {
   return (
     <div className="min-h-screen bg-dark-200 text-light-100 flex flex-col">
       {!hideNavbar && <Navbar />}
-      <main className="flex-1 relative">
+      <main className="flex-1 relative pt-20">  {/* Added pt-20 (padding-top) to create space below navbar */}
         {/* Background gradient elements */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
           <div className="absolute -top-[15%] -left-[10%] w-[70%] h-[60%] rounded-full bg-primary/5 blur-[120px]"></div>
