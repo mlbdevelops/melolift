@@ -32,7 +32,7 @@ const Layout = ({ children, hideNavbar = false }: LayoutProps) => {
           <div className="flex space-x-4 mt-2 md:mt-0">
             <a href="/terms" className="hover:text-primary transition-colors">Terms</a>
             <a href="/privacy" className="hover:text-primary transition-colors">Privacy</a>
-            <a href="https://facebook.com/" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Contact</a>
+            <a href="https://www.facebook.com/profile.php?id=61574938462896" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Contact</a>
           </div>
         </div>
       </footer>
